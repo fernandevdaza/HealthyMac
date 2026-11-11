@@ -1,10 +1,11 @@
 //! Invented monitor readings, apps, startup items and a disk tree.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use hm_core::audit::AuditEntry;
-use hm_core::{Area, CleanOutcome, CleanStatus, Finding, Recovery, Risk};
+use hm_core::fmt::human_size;
+use hm_core::{t, tf, Area, CleanOutcome, CleanStatus, Finding, Recovery, Risk};
 use hm_system::types::*;
 
 use super::{days_ago, hours_ago, GB, GIB, HOME, MB};
@@ -112,17 +113,32 @@ fn process(pid: u32, name: &str, cpu: f32, memory: u64) -> ProcessStats {
     }
 }
 
+/// `reclaimable` is what `hm_system::health::reclaimable_bytes` counts, and the factor it adds reads
+/// like the real one, so the demo shows what the app would.
 pub fn health(reclaimable: u64) -> HealthReport {
     let mut factors = vec![
         HealthFactor {
-            title: "El disco va justo: 118 GB libres de 994 GB".to_string(),
-            detail: "Por debajo del 15 % libre, macOS empieza a ir más lento y las actualizaciones pueden fallar.".to_string(),
+            title: tf!(
+                "El disco va justo: {} libres de {}",
+                "Disk space is running low: {} free of {}",
+                human_size(118 * GB),
+                human_size(994 * GB)
+            ),
+            detail: t!(
+                "Por debajo del 15 % libre, macOS empieza a ir más lento y las actualizaciones pueden fallar.",
+                "Below 15% free, macOS starts to slow down and updates can fail."
+            )
+            .to_string(),
             severity: Severity::Warning,
             penalty: 14,
         },
         HealthFactor {
-            title: "El intercambio está en uso".to_string(),
-            detail: "840 MB en disco. Nada grave, pero ese modelo cargado está apretando la memoria.".to_string(),
+            title: t!("El intercambio está en uso", "Swap is in use").to_string(),
+            detail: tf!(
+                "{} en disco. Nada grave, pero ese modelo cargado está apretando la memoria.",
+                "{} on disk. Nothing serious, but that loaded model is putting pressure on memory.",
+                human_size(840 * MB)
+            ),
             severity: Severity::Info,
             penalty: 3,
         },
@@ -132,12 +148,12 @@ pub fn health(reclaimable: u64) -> HealthReport {
         factors.insert(
             1,
             HealthFactor {
-                title: format!(
-                    "Hay {} que podrías recuperar",
-                    hm_core::fmt::human_size(reclaimable)
+                title: t!("Espacio recuperable", "Reclaimable space").to_string(),
+                detail: tf!(
+                    "{} de cachés y archivos que se pueden regenerar. Limpiarlos no pierde nada importante.",
+                    "{} of caches and files that can be rebuilt. Cleaning them up loses nothing important.",
+                    human_size(reclaimable)
                 ),
-                detail: "Sobre todo compilaciones y cachés de desarrollo, que se regeneran solas."
-                    .to_string(),
                 severity: Severity::Info,
                 penalty: 6,
             },
@@ -146,9 +162,27 @@ pub fn health(reclaimable: u64) -> HealthReport {
     }
     HealthReport {
         score,
-        label: "Buena".to_string(),
+        label: t!("Buena", "Good").to_string(),
         factors,
     }
+}
+
+/// The demo's apps are invented, but when one of them is installed on this Mac its real icon is
+/// shown, read from the bundle on disk the same way the real Apps page does. Nothing is downloaded:
+/// the demo stays as offline as the rest of the app.
+fn installed_icon(name: &str) -> Option<PathBuf> {
+    // The demo names Photos in the interface language; the bundle is always Photos.app.
+    let bundle = if name == "Fotos" { "Photos" } else { name };
+    [
+        "/Applications",
+        "/Applications/Utilities",
+        "/System/Applications",
+        "/System/Applications/Utilities",
+    ]
+    .iter()
+    .map(|dir| Path::new(dir).join(format!("{bundle}.app")))
+    .find(|path| path.is_dir())
+    .and_then(|path| hm_system::apps::icon_path_of(&path))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -183,9 +217,10 @@ fn app(
         running,
         is_system,
         arch,
-        icon_path: None,
+        icon_path: installed_icon(name),
         executable: Some(name.to_string()),
-        uninstall_blocked: is_system.then(|| "Forma parte de macOS.".to_string()),
+        uninstall_blocked: is_system
+            .then(|| t!("Forma parte de macOS.", "It's part of macOS.").to_string()),
     }
 }
 
@@ -195,7 +230,11 @@ pub fn apps() -> Vec<AppInfo> {
             "Xcode",
             "16.2",
             12_400 * MB,
-            &[("Developer/Xcode/UserData", 4_200 * MB, "Datos de usuario")],
+            &[(
+                "Developer/Xcode/UserData",
+                4_200 * MB,
+                t!("Datos de usuario", "User data"),
+            )],
             0,
             true,
             false,
@@ -205,7 +244,11 @@ pub fn apps() -> Vec<AppInfo> {
             "Docker",
             "4.37.1",
             2_100 * MB,
-            &[("Containers/com.docker.docker", 58_000 * MB, "Contenedor")],
+            &[(
+                "Containers/com.docker.docker",
+                58_000 * MB,
+                t!("Contenedor", "Container"),
+            )],
             3,
             false,
             false,
@@ -218,7 +261,7 @@ pub fn apps() -> Vec<AppInfo> {
             &[(
                 "Application Support/LM Studio",
                 620 * MB,
-                "Soporte de aplicación",
+                t!("Soporte de aplicación", "Application Support"),
             )],
             1,
             false,
@@ -229,7 +272,11 @@ pub fn apps() -> Vec<AppInfo> {
             "Final Cut Pro",
             "11.0",
             7_800 * MB,
-            &[("Caches/com.apple.FinalCut", 1_800 * MB, "Caché")],
+            &[(
+                "Caches/com.apple.FinalCut",
+                1_800 * MB,
+                t!("Caché", "Cache"),
+            )],
             92,
             false,
             false,
@@ -239,7 +286,11 @@ pub fn apps() -> Vec<AppInfo> {
             "Microsoft Excel",
             "16.93",
             2_400 * MB,
-            &[("Containers/com.microsoft.Excel", 340 * MB, "Contenedor")],
+            &[(
+                "Containers/com.microsoft.Excel",
+                340 * MB,
+                t!("Contenedor", "Container"),
+            )],
             15,
             false,
             false,
@@ -250,8 +301,12 @@ pub fn apps() -> Vec<AppInfo> {
             "23.5",
             4_900 * MB,
             &[
-                ("Caches/Adobe", 2_600 * MB, "Caché"),
-                ("Preferences/Adobe", 4 * MB, "Preferencias"),
+                ("Caches/Adobe", 2_600 * MB, t!("Caché", "Cache")),
+                (
+                    "Preferences/Adobe",
+                    4 * MB,
+                    t!("Preferencias", "Preferences"),
+                ),
             ],
             410,
             false,
@@ -265,7 +320,7 @@ pub fn apps() -> Vec<AppInfo> {
             &[(
                 "Application Support/Steam",
                 48_000 * MB,
-                "Soporte de aplicación",
+                t!("Soporte de aplicación", "Application Support"),
             )],
             44,
             false,
@@ -279,7 +334,7 @@ pub fn apps() -> Vec<AppInfo> {
             &[(
                 "Application Support/Google/Chrome",
                 3_400 * MB,
-                "Soporte de aplicación",
+                t!("Soporte de aplicación", "Application Support"),
             )],
             0,
             true,
@@ -293,7 +348,7 @@ pub fn apps() -> Vec<AppInfo> {
             &[(
                 "Application Support/Slack",
                 1_200 * MB,
-                "Soporte de aplicación",
+                t!("Soporte de aplicación", "Application Support"),
             )],
             0,
             true,
@@ -320,8 +375,9 @@ pub fn apps() -> Vec<AppInfo> {
             true,
             AppArch::Universal,
         ),
+        // Finder shows Apple's own apps under their localized names.
         app(
-            "Fotos",
+            t!("Fotos", "Photos"),
             "10.0",
             62 * MB,
             &[],
@@ -334,7 +390,11 @@ pub fn apps() -> Vec<AppInfo> {
             "Spotify",
             "1.2.52",
             410 * MB,
-            &[("Caches/com.spotify.client", 7_400 * MB, "Caché")],
+            &[(
+                "Caches/com.spotify.client",
+                7_400 * MB,
+                t!("Caché", "Cache"),
+            )],
             0,
             true,
             false,
@@ -366,10 +426,13 @@ pub fn uninstall_finding(app: &AppInfo, include_leftovers: bool) -> Finding {
         "apps.uninstall",
         Area::Apps,
         &app.name,
-        format!("Desinstalar {}", app.name),
+        tf!("Desinstalar {}", "Uninstall {}", app.name),
     )
     .subtitle(app.path.display().to_string())
-    .explanation("Mueve la app y sus datos a la Papelera.")
+    .explanation(t!(
+        "Mueve la app y sus datos a la Papelera.",
+        "Moves the app and its data to the Trash."
+    ))
     .size(size)
     .items(paths.len() as u64)
     .risk(Risk::Review)
@@ -646,9 +709,16 @@ pub fn history() -> Vec<AuditEntry> {
         },
     };
     vec![
-        entry("Caché de npm", 0, 5_100 * MB, CleanStatus::Done, 3, None),
         entry(
-            "Homebrew: descargas viejas",
+            t!("Caché de npm", "npm cache"),
+            0,
+            5_100 * MB,
+            CleanStatus::Done,
+            3,
+            None,
+        ),
+        entry(
+            t!("Homebrew: descargas viejas", "Homebrew: old downloads"),
             2_400 * MB,
             0,
             CleanStatus::Done,
@@ -661,10 +731,10 @@ pub fn history() -> Vec<AuditEntry> {
             0,
             CleanStatus::Skipped,
             3,
-            Some("Xcode está abierto"),
+            Some(t!("Xcode está abierto", "Xcode is open")),
         ),
         entry(
-            "Deduplicar qwen3:32b",
+            t!("Deduplicar qwen3:32b", "Deduplicate qwen3:32b"),
             19_000 * MB,
             0,
             CleanStatus::Done,
@@ -672,7 +742,7 @@ pub fn history() -> Vec<AuditEntry> {
             None,
         ),
         entry(
-            "Vaciar la Papelera",
+            t!("Vaciar la Papelera", "Empty Trash"),
             31_000 * MB,
             0,
             CleanStatus::Done,
@@ -680,7 +750,7 @@ pub fn history() -> Vec<AuditEntry> {
             None,
         ),
         entry(
-            "Registros de apps",
+            t!("Registros de apps", "App logs"),
             0,
             980 * MB,
             CleanStatus::Partial,

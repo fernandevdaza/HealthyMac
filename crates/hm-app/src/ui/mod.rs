@@ -4,6 +4,7 @@ pub mod charts;
 pub mod chrome;
 pub mod controls;
 pub mod label;
+pub mod motion;
 pub mod scrollbar;
 
 use std::sync::{Arc, LazyLock};

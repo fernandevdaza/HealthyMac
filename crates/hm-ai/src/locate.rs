@@ -175,11 +175,17 @@ impl Roots {
         comfy.push(home.join("comfy/ComfyUI"));
         comfy.push(home.join("Documents/ComfyUI"));
 
-        let a1111 = vec![
+        let mut a1111 = vec![
             home.join("stable-diffusion-webui"),
             home.join("stable-diffusion-webui-forge"),
             home.join("Documents/stable-diffusion-webui"),
         ];
+        // People clone these next to their other projects, such as ~/Projects/ComfyUI.
+        for dir in hm_core::config::common_project_dirs(home) {
+            comfy.push(dir.join("ComfyUI"));
+            a1111.push(dir.join("stable-diffusion-webui"));
+            a1111.push(dir.join("stable-diffusion-webui-forge"));
+        }
 
         let mut roots = Self {
             home: home.to_path_buf(),

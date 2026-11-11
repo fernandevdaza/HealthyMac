@@ -205,19 +205,25 @@ impl Cleaner {
     fn clean_one(&self, finding: &Finding, cancel: &CancelToken) -> CleanOutcome {
         for process in &finding.blocked_by {
             if exec::is_process_running(process) {
-                return CleanOutcome::skipped(finding, format!("{process} está abierto"));
+                return CleanOutcome::skipped(
+                    finding,
+                    crate::tf!("{process} está abierto", "{process} is open"),
+                );
             }
         }
         match &finding.action {
-            Action::ReportOnly => CleanOutcome::skipped(finding, "solo informativo"),
+            Action::ReportOnly => CleanOutcome::skipped(
+                finding,
+                crate::t!("solo informativo", "for information only"),
+            ),
             Action::Trash { paths } => self.remove_paths(finding, paths, cancel),
             Action::TrashContents { dir } => match fsutil::try_children(dir) {
                 Ok(children) if children.is_empty() => {
-                    CleanOutcome::skipped(finding, "ya está vacío")
+                    CleanOutcome::skipped(finding, crate::t!("ya está vacío", "already empty"))
                 }
                 Ok(children) => self.remove_paths(finding, &children, cancel),
                 Err(err) if err.kind() == ErrorKind::NotFound => {
-                    CleanOutcome::skipped(finding, "ya no existe")
+                    CleanOutcome::skipped(finding, crate::t!("ya no existe", "no longer exists"))
                 }
                 Err(err) => CleanOutcome::failed(finding, unreadable_folder(dir, &err)),
             },
@@ -237,7 +243,10 @@ impl Cleaner {
             Err(err) => return CleanOutcome::failed(finding, unreadable_folder(&trash_dir, &err)),
         };
         if children.is_empty() {
-            return CleanOutcome::skipped(finding, "la Papelera ya está vacía");
+            return CleanOutcome::skipped(
+                finding,
+                crate::t!("la Papelera ya está vacía", "the Trash is already empty"),
+            );
         }
         let mut outcome = CleanOutcome::empty(finding, CleanStatus::Done);
         let mut acted = 0usize;
@@ -341,7 +350,7 @@ impl Cleaner {
 
         outcome.status = match (acted, outcome.errors.is_empty()) {
             (0, true) if already_gone > 0 => {
-                outcome.message = Some("ya no existe".to_string());
+                outcome.message = Some(crate::t!("ya no existe", "no longer exists").to_string());
                 CleanStatus::Skipped
             }
             (0, _) => CleanStatus::Failed,
@@ -357,13 +366,20 @@ impl Cleaner {
             return CleanOutcome::failed(finding, violation.to_string());
         }
         let Some(resolved) = exec::which(program, &self.home) else {
-            return CleanOutcome::failed(finding, format!("{program} no está instalado"));
+            return CleanOutcome::failed(
+                finding,
+                crate::tf!("{program} no está instalado", "{program} is not installed"),
+            );
         };
         if self.options.dry_run {
             let mut outcome = CleanOutcome::empty(finding, CleanStatus::WouldClean);
             outcome.freed_bytes = finding.size;
             outcome.freed_is_estimate = true;
-            outcome.message = Some(format!("ejecutaría: {program} {}", args.join(" ")));
+            outcome.message = Some(crate::tf!(
+                "ejecutaría: {program} {}",
+                "would run: {program} {}",
+                args.join(" ")
+            ));
             return outcome;
         }
         let args: Vec<&str> = args.iter().map(String::as_str).collect();
@@ -374,13 +390,18 @@ impl Cleaner {
                 outcome.freed_is_estimate = true;
                 outcome
             }
-            Ok(output) if output.timed_out => {
-                CleanOutcome::failed(finding, format!("{program} no terminó a tiempo"))
-            }
+            Ok(output) if output.timed_out => CleanOutcome::failed(
+                finding,
+                crate::tf!(
+                    "{program} no terminó a tiempo",
+                    "{program} did not finish in time"
+                ),
+            ),
             Ok(output) => CleanOutcome::failed(
                 finding,
-                format!(
+                crate::tf!(
                     "{program} terminó con error ({}): {}",
+                    "{program} exited with an error ({}): {}",
                     output.code.unwrap_or(-1),
                     output.stderr.trim()
                 ),
@@ -419,7 +440,8 @@ impl Cleaner {
 
         outcome.status = match (acted, outcome.errors.is_empty()) {
             (0, true) if already_done > 0 => {
-                outcome.message = Some("ya estaba deduplicado".to_string());
+                outcome.message =
+                    Some(crate::t!("ya estaba deduplicado", "already deduplicated").to_string());
                 CleanStatus::Skipped
             }
             (0, _) => CleanStatus::Failed,
@@ -439,10 +461,13 @@ impl Cleaner {
         let keep_meta = fs::symlink_metadata(keep)?;
         let duplicate_meta = fs::symlink_metadata(duplicate)?;
         if !keep_meta.is_file() || !duplicate_meta.is_file() {
-            bail!("no es un archivo regular");
+            bail!(crate::t!("no es un archivo regular", "not a regular file"));
         }
         if keep_meta.dev() != duplicate_meta.dev() {
-            bail!("están en volúmenes distintos");
+            bail!(crate::t!(
+                "están en volúmenes distintos",
+                "they are on different volumes"
+            ));
         }
         if keep_meta.ino() == duplicate_meta.ino() {
             return Ok(0);
@@ -453,13 +478,19 @@ impl Cleaner {
             }
         }
         if keep_meta.len() != duplicate_meta.len() {
-            bail!("los tamaños no coinciden");
+            bail!(crate::t!(
+                "los tamaños no coinciden",
+                "the sizes do not match"
+            ));
         }
         // Never trust the scan's verdict: a file swapped by a clone must be proven identical.
         let keep_hash = fsutil::sha256_file(keep, cancel)?;
         let duplicate_hash = fsutil::sha256_file(duplicate, cancel)?;
         if keep_hash != duplicate_hash {
-            bail!("el contenido no coincide");
+            bail!(crate::t!(
+                "el contenido no coincide",
+                "the contents do not match"
+            ));
         }
 
         // Clones of something else release nothing, so ask APFS rather than counting blocks.
@@ -469,18 +500,26 @@ impl Cleaner {
             return Ok(freed);
         }
 
-        let parent = duplicate.parent().context("sin carpeta padre")?;
+        let parent = duplicate
+            .parent()
+            .context(crate::t!("sin carpeta padre", "no parent folder"))?;
         let name = duplicate
             .file_name()
-            .context("sin nombre")?
+            .context(crate::t!("sin nombre", "no name"))?
             .to_string_lossy();
         let temporary = parent.join(format!(".{name}.hm-clone-{}", std::process::id()));
         clone_file(keep, &temporary)?;
         // The clone takes the mode of `keep`. The duplicate's name should keep its own.
         let swap = fs::set_permissions(&temporary, duplicate_meta.permissions())
-            .context("no se pudieron copiar los permisos")
+            .context(crate::t!(
+                "no se pudieron copiar los permisos",
+                "could not copy the permissions"
+            ))
             .and_then(|()| {
-                fs::rename(&temporary, duplicate).context("no se pudo reemplazar el archivo")
+                fs::rename(&temporary, duplicate).context(crate::t!(
+                    "no se pudo reemplazar el archivo",
+                    "could not replace the file"
+                ))
             });
         if let Err(err) = swap {
             let _ = fs::remove_file(&temporary);
@@ -492,12 +531,17 @@ impl Cleaner {
 
 fn unreadable_folder(dir: &Path, err: &std::io::Error) -> String {
     if err.kind() == ErrorKind::PermissionDenied {
-        format!(
+        crate::tf!(
             "macOS no deja leer {}. Concede a HealthyMac el Acceso total al disco en Ajustes del Sistema.",
+            "macOS won't let HealthyMac read {}. Give it Full Disk Access in System Settings.",
             dir.display()
         )
     } else {
-        format!("no se pudo leer {}: {err}", dir.display())
+        crate::tf!(
+            "no se pudo leer {}: {err}",
+            "could not read {}: {err}",
+            dir.display()
+        )
     }
 }
 
@@ -521,8 +565,10 @@ fn clone_file(source: &Path, destination: &Path) -> Result<()> {
     let result =
         unsafe { libc::clonefile(source_c.as_ptr(), destination_c.as_ptr(), CLONE_NOFOLLOW) };
     if result != 0 {
-        return Err(std::io::Error::last_os_error())
-            .context("clonefile falló (¿el volumen no es APFS?)");
+        return Err(std::io::Error::last_os_error()).context(crate::t!(
+            "clonefile falló (¿el volumen no es APFS?)",
+            "clonefile failed (is the volume not APFS?)"
+        ));
     }
     Ok(())
 }

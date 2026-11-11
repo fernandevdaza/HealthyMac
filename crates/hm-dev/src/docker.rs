@@ -7,7 +7,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use hm_core::{fsutil, ScanContext};
+use hm_core::{fsutil, tf, ScanContext};
 
 use crate::types::{DockerSummary, DockerUsage};
 use crate::util;
@@ -243,8 +243,9 @@ fn inspect_disk_image(ctx: &ScanContext, runtime: Runtime, summary: &mut DockerS
         }
     }
     if blocked {
-        summary.disk_image_note = Some(format!(
+        summary.disk_image_note = Some(tf!(
             "No se puede saber cuánto ocupa la imagen de disco de {} porque está en una carpeta protegida de macOS, que no se abre sin pedir permiso. Si concedes Acceso total al disco a HealthyMac, verás su tamaño real, que suele ser mayor de lo que informa Docker.",
+            "There is no way to tell how much space the {} disk image takes, because it is in a protected macOS folder that can't be opened without asking for permission. If you give HealthyMac Full Disk Access, you'll see its real size, which is usually larger than Docker reports.",
             runtime.label()
         ));
     }

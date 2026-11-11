@@ -24,7 +24,7 @@ use hm_core::{fmt::age_days, fsutil, Recovery, Risk, ScanContext, SizeInfo};
 use rayon::prelude::*;
 
 use crate::types::ProjectKind;
-use crate::util;
+use crate::util::{self, Text};
 
 /// Deep enough for real trees. A guard against pathological nesting, not a design limit.
 const MAX_DEPTH: usize = 32;
@@ -85,10 +85,10 @@ pub(crate) struct ArtifactRule {
     pub(crate) preselect: bool,
     /// Many small folders per project, shown to the user as one line.
     pub(crate) aggregate: bool,
-    /// What this is. A complete sentence in Spanish.
-    pub(crate) what: &'static str,
-    /// How it comes back. A complete sentence in Spanish.
-    pub(crate) recover: &'static str,
+    /// What this is. A complete sentence.
+    pub(crate) what: Text,
+    /// How it comes back. A complete sentence.
+    pub(crate) recover: Text,
 }
 
 impl ArtifactRule {
@@ -96,8 +96,8 @@ impl ArtifactRule {
         name: &'static str,
         manifests: &'static [&'static str],
         class: ArtifactClass,
-        what: &'static str,
-        recover: &'static str,
+        what: Text,
+        recover: Text,
     ) -> Self {
         Self {
             name,
@@ -207,10 +207,18 @@ const ANY_BUILD: &[&str] = &[
     "*.sln",
 ];
 
-const REINSTALL: &str =
-    "Se recupera al instalar de nuevo las dependencias del proyecto, con conexión.";
-const REBUILD: &str = "Se regenera al compilar de nuevo el proyecto, lo que lleva su tiempo.";
-const NEXT_RUN: &str = "La herramienta lo recrea la próxima vez que se ejecute.";
+const REINSTALL: Text = Text::new(
+    "Se recupera al instalar de nuevo las dependencias del proyecto, con conexión.",
+    "It comes back when you reinstall the project's dependencies, which needs a connection.",
+);
+const REBUILD: Text = Text::new(
+    "Se regenera al compilar de nuevo el proyecto, lo que lleva su tiempo.",
+    "It regenerates when you build the project again, which takes time.",
+);
+const NEXT_RUN: Text = Text::new(
+    "La herramienta lo recrea la próxima vez que se ejecute.",
+    "The tool recreates it the next time it runs.",
+);
 
 static RULES: &[ArtifactRule] = &[
     // Dependencies.
@@ -218,7 +226,7 @@ static RULES: &[ArtifactRule] = &[
         "node_modules",
         NODE,
         ArtifactClass::Dependencies,
-        "Dependencias instaladas del proyecto.",
+        Text::new("Dependencias instaladas del proyecto.", "The project's installed dependencies."),
         REINSTALL,
     )
     .opaque(),
@@ -226,30 +234,48 @@ static RULES: &[ArtifactRule] = &[
         "bower_components",
         &["bower.json"],
         ArtifactClass::Dependencies,
-        "Dependencias de Bower.",
-        "Se recupera con «bower install», con conexión.",
+        Text::new("Dependencias de Bower.", "Bower dependencies."),
+        Text::new(
+            "Se recupera con «bower install», con conexión.",
+            "It comes back with “bower install”, which needs a connection.",
+        ),
     )
     .opaque(),
     ArtifactRule::new(
         "Pods",
         &["Podfile"],
         ArtifactClass::Dependencies,
-        "Dependencias de CocoaPods del proyecto.",
-        "Se recupera con «pod install», con conexión.",
+        Text::new(
+            "Dependencias de CocoaPods del proyecto.",
+            "The project's CocoaPods dependencies.",
+        ),
+        Text::new(
+            "Se recupera con «pod install», con conexión.",
+            "It comes back with “pod install”, which needs a connection.",
+        ),
     ),
     ArtifactRule::new(
         ".dart_tool",
         &["pubspec.yaml"],
         ArtifactClass::Dependencies,
-        "Estado de las dependencias y compilaciones de Dart.",
-        "Se recupera con «flutter pub get» o «dart pub get».",
+        Text::new(
+            "Estado de las dependencias y compilaciones de Dart.",
+            "State of Dart dependencies and builds.",
+        ),
+        Text::new(
+            "Se recupera con «flutter pub get» o «dart pub get».",
+            "It comes back with “flutter pub get” or “dart pub get”.",
+        ),
     )
     .opaque(),
     ArtifactRule::new(
         ".venv",
         PYTHON,
         ArtifactClass::Dependencies,
-        "Entorno virtual de Python del proyecto.",
+        Text::new(
+            "Entorno virtual de Python del proyecto.",
+            "The project's Python virtual environment.",
+        ),
         REINSTALL,
     )
     .marker("pyvenv.cfg")
@@ -258,7 +284,10 @@ static RULES: &[ArtifactRule] = &[
         "venv",
         PYTHON,
         ArtifactClass::Dependencies,
-        "Entorno virtual de Python del proyecto.",
+        Text::new(
+            "Entorno virtual de Python del proyecto.",
+            "The project's Python virtual environment.",
+        ),
         REINSTALL,
     )
     .marker("pyvenv.cfg")
@@ -267,7 +296,10 @@ static RULES: &[ArtifactRule] = &[
         "env",
         PYTHON,
         ArtifactClass::Dependencies,
-        "Entorno virtual de Python del proyecto.",
+        Text::new(
+            "Entorno virtual de Python del proyecto.",
+            "The project's Python virtual environment.",
+        ),
         REINSTALL,
     )
     .marker("pyvenv.cfg")
@@ -276,31 +308,43 @@ static RULES: &[ArtifactRule] = &[
         ".tox",
         PYTHON,
         ArtifactClass::Dependencies,
-        "Entornos de prueba de tox.",
-        "Tox los recrea en la próxima ejecución, con conexión.",
+        Text::new("Entornos de prueba de tox.", "tox test environments."),
+        Text::new(
+            "Tox los recrea en la próxima ejecución, con conexión.",
+            "Tox recreates them on the next run, which needs a connection.",
+        ),
     )
     .opaque(),
     ArtifactRule::new(
         ".nox",
         PYTHON,
         ArtifactClass::Dependencies,
-        "Entornos de prueba de nox.",
-        "Nox los recrea en la próxima ejecución, con conexión.",
+        Text::new("Entornos de prueba de nox.", "nox test environments."),
+        Text::new(
+            "Nox los recrea en la próxima ejecución, con conexión.",
+            "Nox recreates them on the next run, which needs a connection.",
+        ),
     )
     .opaque(),
     ArtifactRule::new(
         ".terraform",
         &["*.tf"],
         ArtifactClass::Dependencies,
-        "Proveedores y módulos descargados por Terraform.",
-        "Se recupera con «terraform init». El estado de tu infraestructura no está aquí.",
+        Text::new(
+            "Proveedores y módulos descargados por Terraform.",
+            "Providers and modules downloaded by Terraform.",
+        ),
+        Text::new(
+            "Se recupera con «terraform init». El estado de tu infraestructura no está aquí.",
+            "It comes back with “terraform init”. Your infrastructure state is not here.",
+        ),
     )
     .opaque(),
     ArtifactRule::new(
         "elm-stuff",
         &["elm.json"],
         ArtifactClass::Dependencies,
-        "Dependencias y compilados de Elm.",
+        Text::new("Dependencias y compilados de Elm.", "Elm dependencies and build output."),
         REBUILD,
     )
     .opaque(),
@@ -308,7 +352,10 @@ static RULES: &[ArtifactRule] = &[
         "vendor",
         &["composer.json", "go.mod", "Gemfile"],
         ArtifactClass::Dependencies,
-        "Dependencias copiadas dentro del proyecto. Git las ignora.",
+        Text::new(
+            "Dependencias copiadas dentro del proyecto. Git las ignora.",
+            "Dependencies copied into the project. Git ignores them.",
+        ),
         REINSTALL,
     )
     .ambiguous()
@@ -317,7 +364,10 @@ static RULES: &[ArtifactRule] = &[
         "deps",
         &["mix.exs", "rebar.config"],
         ArtifactClass::Dependencies,
-        "Dependencias de Elixir o Erlang. Git las ignora.",
+        Text::new(
+            "Dependencias de Elixir o Erlang. Git las ignora.",
+            "Elixir or Erlang dependencies. Git ignores them.",
+        ),
         REINSTALL,
     )
     .ambiguous()
@@ -326,8 +376,14 @@ static RULES: &[ArtifactRule] = &[
         "Carthage",
         &["Cartfile"],
         ArtifactClass::Dependencies,
-        "Dependencias y compilados de Carthage. Git los ignora.",
-        "Se recupera con «carthage bootstrap», con conexión.",
+        Text::new(
+            "Dependencias y compilados de Carthage. Git los ignora.",
+            "Carthage dependencies and build output. Git ignores them.",
+        ),
+        Text::new(
+            "Se recupera con «carthage bootstrap», con conexión.",
+            "It comes back with “carthage bootstrap”, which needs a connection.",
+        ),
     )
     .ambiguous()
     .never_preselected(),
@@ -336,14 +392,14 @@ static RULES: &[ArtifactRule] = &[
         "target",
         JVM_RUST,
         ArtifactClass::BuildOutput,
-        "Compilados de Cargo o Maven.",
+        Text::new("Compilados de Cargo o Maven.", "Cargo or Maven build output."),
         REBUILD,
     ),
     ArtifactRule::new(
         ".next",
         NODE,
         ArtifactClass::BuildOutput,
-        "Compilación y caché de Next.js.",
+        Text::new("Compilación y caché de Next.js.", "Next.js build and cache."),
         REBUILD,
     )
     .opaque(),
@@ -351,7 +407,7 @@ static RULES: &[ArtifactRule] = &[
         ".nuxt",
         NODE,
         ArtifactClass::BuildOutput,
-        "Compilación de Nuxt.",
+        Text::new("Compilación de Nuxt.", "Nuxt build."),
         REBUILD,
     )
     .opaque(),
@@ -359,7 +415,7 @@ static RULES: &[ArtifactRule] = &[
         ".svelte-kit",
         NODE,
         ArtifactClass::BuildOutput,
-        "Compilación de SvelteKit.",
+        Text::new("Compilación de SvelteKit.", "SvelteKit build."),
         REBUILD,
     )
     .opaque(),
@@ -367,7 +423,7 @@ static RULES: &[ArtifactRule] = &[
         ".angular",
         NODE,
         ArtifactClass::BuildOutput,
-        "Caché de compilación de Angular.",
+        Text::new("Caché de compilación de Angular.", "Angular build cache."),
         REBUILD,
     )
     .opaque(),
@@ -375,7 +431,7 @@ static RULES: &[ArtifactRule] = &[
         ".docusaurus",
         NODE,
         ArtifactClass::BuildOutput,
-        "Archivos generados por Docusaurus.",
+        Text::new("Archivos generados por Docusaurus.", "Files generated by Docusaurus."),
         REBUILD,
     )
     .opaque(),
@@ -383,7 +439,7 @@ static RULES: &[ArtifactRule] = &[
         ".astro",
         NODE,
         ArtifactClass::BuildOutput,
-        "Archivos generados por Astro.",
+        Text::new("Archivos generados por Astro.", "Files generated by Astro."),
         REBUILD,
     )
     .opaque(),
@@ -391,7 +447,7 @@ static RULES: &[ArtifactRule] = &[
         ".gradle",
         GRADLE,
         ArtifactClass::BuildOutput,
-        "Caché de Gradle de este proyecto.",
+        Text::new("Caché de Gradle de este proyecto.", "This project's Gradle cache."),
         REBUILD,
     )
     .opaque(),
@@ -399,7 +455,7 @@ static RULES: &[ArtifactRule] = &[
         ".kotlin",
         GRADLE,
         ArtifactClass::BuildOutput,
-        "Datos de compilación de Kotlin.",
+        Text::new("Datos de compilación de Kotlin.", "Kotlin build data."),
         REBUILD,
     )
     .opaque(),
@@ -407,7 +463,7 @@ static RULES: &[ArtifactRule] = &[
         ".cxx",
         GRADLE,
         ArtifactClass::BuildOutput,
-        "Compilados nativos de Android.",
+        Text::new("Compilados nativos de Android.", "Android native build output."),
         REBUILD,
     )
     .opaque(),
@@ -415,7 +471,10 @@ static RULES: &[ArtifactRule] = &[
         ".build",
         &["Package.swift"],
         ArtifactClass::BuildOutput,
-        "Compilados y dependencias de Swift Package Manager.",
+        Text::new(
+            "Compilados y dependencias de Swift Package Manager.",
+            "Swift Package Manager build output and dependencies.",
+        ),
         REBUILD,
     )
     .opaque(),
@@ -423,7 +482,10 @@ static RULES: &[ArtifactRule] = &[
         "DerivedData",
         XCODE,
         ArtifactClass::BuildOutput,
-        "Compilados de Xcode guardados dentro del proyecto.",
+        Text::new(
+            "Compilados de Xcode guardados dentro del proyecto.",
+            "Xcode build output kept inside the project.",
+        ),
         REBUILD,
     )
     .opaque(),
@@ -431,7 +493,7 @@ static RULES: &[ArtifactRule] = &[
         "cmake-build-",
         &["CMakeLists.txt"],
         ArtifactClass::BuildOutput,
-        "Compilación de CMake creada por el IDE.",
+        Text::new("Compilación de CMake creada por el IDE.", "CMake build created by the IDE."),
         REBUILD,
     )
     .prefix()
@@ -440,7 +502,7 @@ static RULES: &[ArtifactRule] = &[
         ".stack-work",
         &["stack.yaml"],
         ArtifactClass::BuildOutput,
-        "Compilados de Haskell Stack.",
+        Text::new("Compilados de Haskell Stack.", "Haskell Stack build output."),
         REBUILD,
     )
     .opaque(),
@@ -448,14 +510,14 @@ static RULES: &[ArtifactRule] = &[
         "_build",
         &["mix.exs", "rebar.config"],
         ArtifactClass::BuildOutput,
-        "Compilados de Elixir o Erlang.",
+        Text::new("Compilados de Elixir o Erlang.", "Elixir or Erlang build output."),
         REBUILD,
     ),
     ArtifactRule::new(
         ".zig-cache",
         &["build.zig"],
         ArtifactClass::BuildOutput,
-        "Caché de compilación de Zig.",
+        Text::new("Caché de compilación de Zig.", "Zig build cache."),
         REBUILD,
     )
     .opaque(),
@@ -463,7 +525,7 @@ static RULES: &[ArtifactRule] = &[
         "zig-cache",
         &["build.zig"],
         ArtifactClass::BuildOutput,
-        "Caché de compilación de Zig.",
+        Text::new("Caché de compilación de Zig.", "Zig build cache."),
         REBUILD,
     )
     .opaque(),
@@ -471,7 +533,10 @@ static RULES: &[ArtifactRule] = &[
         "build",
         ANY_BUILD,
         ArtifactClass::BuildOutput,
-        "Carpeta de compilación. Git confirma que está ignorada.",
+        Text::new(
+            "Carpeta de compilación. Git confirma que está ignorada.",
+            "Build folder. Git confirms it is ignored.",
+        ),
         REBUILD,
     )
     .ambiguous(),
@@ -479,7 +544,10 @@ static RULES: &[ArtifactRule] = &[
         "dist",
         ANY_BUILD,
         ArtifactClass::BuildOutput,
-        "Carpeta de distribución. Git confirma que está ignorada.",
+        Text::new(
+            "Carpeta de distribución. Git confirma que está ignorada.",
+            "Distribution folder. Git confirms it is ignored.",
+        ),
         REBUILD,
     )
     .ambiguous(),
@@ -487,7 +555,10 @@ static RULES: &[ArtifactRule] = &[
         "out",
         ANY_BUILD,
         ArtifactClass::BuildOutput,
-        "Carpeta de salida. Git confirma que está ignorada, pero conviene mirarla: algunas herramientas guardan aquí resultados que costó obtener.",
+        Text::new(
+            "Carpeta de salida. Git confirma que está ignorada, pero conviene mirarla: algunas herramientas guardan aquí resultados que costó obtener.",
+            "Output folder. Git confirms it is ignored, but take a look first: some tools keep results here that took effort to produce.",
+        ),
         REBUILD,
     )
     .ambiguous()
@@ -496,7 +567,10 @@ static RULES: &[ArtifactRule] = &[
         "bin",
         ANY_BUILD,
         ArtifactClass::BuildOutput,
-        "Binarios del proyecto. Git confirma que están ignorados, pero conviene mirarlos: pueden ser herramientas descargadas a mano.",
+        Text::new(
+            "Binarios del proyecto. Git confirma que están ignorados, pero conviene mirarlos: pueden ser herramientas descargadas a mano.",
+            "The project's binaries. Git confirms they are ignored, but take a look first: they may be tools downloaded by hand.",
+        ),
         REBUILD,
     )
     .ambiguous()
@@ -505,7 +579,10 @@ static RULES: &[ArtifactRule] = &[
         "obj",
         DOTNET,
         ArtifactClass::BuildOutput,
-        "Compilados intermedios de .NET. Git confirma que están ignorados.",
+        Text::new(
+            "Compilados intermedios de .NET. Git confirma que están ignorados.",
+            "Intermediate .NET build output. Git confirms it is ignored.",
+        ),
         REBUILD,
     )
     .ambiguous(),
@@ -513,7 +590,10 @@ static RULES: &[ArtifactRule] = &[
         ".output",
         NODE,
         ArtifactClass::BuildOutput,
-        "Compilación de Nuxt o Nitro. Git confirma que está ignorada.",
+        Text::new(
+            "Compilación de Nuxt o Nitro. Git confirma que está ignorada.",
+            "Nuxt or Nitro build. Git confirms it is ignored.",
+        ),
         REBUILD,
     )
     .ambiguous(),
@@ -521,7 +601,10 @@ static RULES: &[ArtifactRule] = &[
         "storybook-static",
         NODE,
         ArtifactClass::BuildOutput,
-        "Exportación de Storybook. Git confirma que está ignorada.",
+        Text::new(
+            "Exportación de Storybook. Git confirma que está ignorada.",
+            "Storybook export. Git confirms it is ignored.",
+        ),
         REBUILD,
     )
     .ambiguous(),
@@ -530,7 +613,7 @@ static RULES: &[ArtifactRule] = &[
         ".turbo",
         NODE,
         ArtifactClass::ToolCache,
-        "Caché de Turborepo.",
+        Text::new("Caché de Turborepo.", "Turborepo cache."),
         NEXT_RUN,
     )
     .opaque(),
@@ -538,7 +621,7 @@ static RULES: &[ArtifactRule] = &[
         ".parcel-cache",
         NODE,
         ArtifactClass::ToolCache,
-        "Caché de Parcel.",
+        Text::new("Caché de Parcel.", "Parcel cache."),
         NEXT_RUN,
     )
     .opaque(),
@@ -546,7 +629,7 @@ static RULES: &[ArtifactRule] = &[
         ".nyc_output",
         NODE,
         ArtifactClass::ToolCache,
-        "Datos intermedios de cobertura de nyc.",
+        Text::new("Datos intermedios de cobertura de nyc.", "Intermediate nyc coverage data."),
         NEXT_RUN,
     )
     .opaque(),
@@ -554,7 +637,10 @@ static RULES: &[ArtifactRule] = &[
         ".cache",
         NODE,
         ArtifactClass::ToolCache,
-        "Caché de herramientas del proyecto. Git confirma que está ignorada.",
+        Text::new(
+            "Caché de herramientas del proyecto. Git confirma que está ignorada.",
+            "The project's tool cache. Git confirms it is ignored.",
+        ),
         NEXT_RUN,
     )
     .ambiguous(),
@@ -562,23 +648,35 @@ static RULES: &[ArtifactRule] = &[
         "coverage",
         ANY_BUILD,
         ArtifactClass::ToolCache,
-        "Informe de cobertura de tests. Git confirma que está ignorado.",
-        "Se regenera al ejecutar los tests con cobertura.",
+        Text::new(
+            "Informe de cobertura de tests. Git confirma que está ignorado.",
+            "Test coverage report. Git confirms it is ignored.",
+        ),
+        Text::new(
+            "Se regenera al ejecutar los tests con cobertura.",
+            "It regenerates when you run the tests with coverage.",
+        ),
     )
     .ambiguous(),
     ArtifactRule::new(
         "htmlcov",
         PYTHON,
         ArtifactClass::ToolCache,
-        "Informe de cobertura de tests. Git confirma que está ignorado.",
-        "Se regenera al ejecutar los tests con cobertura.",
+        Text::new(
+            "Informe de cobertura de tests. Git confirma que está ignorado.",
+            "Test coverage report. Git confirms it is ignored.",
+        ),
+        Text::new(
+            "Se regenera al ejecutar los tests con cobertura.",
+            "It regenerates when you run the tests with coverage.",
+        ),
     )
     .ambiguous(),
     ArtifactRule::new(
         "__pycache__",
         PYTHON,
         ArtifactClass::ToolCache,
-        "Bytecode compilado por Python.",
+        Text::new("Bytecode compilado por Python.", "Bytecode compiled by Python."),
         NEXT_RUN,
     )
     .python_scope()
@@ -588,7 +686,7 @@ static RULES: &[ArtifactRule] = &[
         ".pytest_cache",
         PYTHON,
         ArtifactClass::ToolCache,
-        "Caché de pytest.",
+        Text::new("Caché de pytest.", "pytest cache."),
         NEXT_RUN,
     )
     .python_scope()
@@ -597,7 +695,7 @@ static RULES: &[ArtifactRule] = &[
         ".mypy_cache",
         PYTHON,
         ArtifactClass::ToolCache,
-        "Caché de mypy.",
+        Text::new("Caché de mypy.", "mypy cache."),
         NEXT_RUN,
     )
     .python_scope()
@@ -606,7 +704,7 @@ static RULES: &[ArtifactRule] = &[
         ".ruff_cache",
         PYTHON,
         ArtifactClass::ToolCache,
-        "Caché de Ruff.",
+        Text::new("Caché de Ruff.", "Ruff cache."),
         NEXT_RUN,
     )
     .python_scope()

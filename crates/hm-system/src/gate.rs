@@ -10,7 +10,7 @@ use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
-use hm_core::{fsutil, Area, Finding, ScanContext};
+use hm_core::{fsutil, t, Area, Finding, ScanContext};
 
 /// Home-relative folders that macOS guards with TCC, so reading them can put a dialog on screen.
 ///
@@ -113,7 +113,7 @@ pub(crate) fn is_inside_guarded(home: &Path, path: &Path) -> bool {
 }
 
 /// Lets the UI collapse the per-scanner "grant access" findings into one call to action.
-pub(crate) const NEEDS_ACCESS_TAG: &str = "requiere_acceso_total";
+pub(crate) const NEEDS_ACCESS_TAG: &str = hm_core::TAG_NEEDS_FULL_DISK_ACCESS;
 
 pub(crate) fn has_access(ctx: &ScanContext) -> bool {
     fsutil::has_full_disk_access(&ctx.home)
@@ -126,7 +126,10 @@ pub(crate) fn missing_access_finding(scanner_id: &str, area: Area, gain: &str) -
         scanner_id,
         area,
         "sin_acceso",
-        "Falta el Acceso total al disco",
+        t!(
+            "Falta el Acceso total al disco",
+            "Full Disk Access is missing"
+        ),
     )
     .explanation(gain)
     .tag(NEEDS_ACCESS_TAG)

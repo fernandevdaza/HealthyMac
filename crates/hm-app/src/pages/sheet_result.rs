@@ -1,8 +1,7 @@
 //! The result of a clean, honest about the difference between freed and merely moved to the Trash.
 
 use gpui::{div, prelude::*, px, AnyElement, Context, ElementId, Hsla, IntoElement};
-use hm_core::fmt::human_size;
-use hm_core::CleanStatus;
+use hm_core::{t, tf, CleanStatus};
 
 use super::plural;
 use super::sheets::{sheet_header, MAX_LISTED, SHEET_WIDTH};
@@ -11,8 +10,9 @@ use crate::flows::clean::ResultSheet;
 use crate::logic::errors::{blocked_by_app_management, friendly_error, APP_MANAGEMENT_URL};
 use crate::state::Shell;
 use crate::theme::{self, font, radius, sp};
-use crate::ui::chrome::{big_number, eyebrow, notice, NoticeKind};
+use crate::ui::chrome::{eyebrow, notice, NoticeKind};
 use crate::ui::controls::{pill, Btn, BtnSize};
+use crate::ui::motion;
 use crate::ui::scrollbar::{scrollbar, ScrollSource};
 use crate::ui::{clip, col, row, TextExt};
 
@@ -22,7 +22,10 @@ impl Shell {
         let trashed = result.report.trashed_bytes();
         let estimated = result.report.has_estimates();
         let was_cut_short = |outcome: &hm_core::CleanOutcome| {
-            outcome.errors.iter().any(|error| error == "cancelado")
+            outcome
+                .errors
+                .iter()
+                .any(|error| is_cancelled_marker(error))
         };
         let failures = result
             .report
@@ -47,33 +50,47 @@ impl Shell {
             .count();
         let simulated = result.simulated;
 
-        let title: String = if simulated && result.cancelled {
-            "Simulación cancelada".to_string()
+        let title: &str = if simulated && result.cancelled {
+            t!("Simulación cancelada", "Simulation cancelled")
         } else if simulated {
-            "Simulación terminada".to_string()
+            t!("Simulación terminada", "Simulation finished")
         } else if failures > 0 {
-            "Hecho, con algún problema".to_string()
+            t!("Hecho, con algún problema", "Done, with some problems")
         } else if result.cancelled {
-            "Limpieza cancelada".to_string()
+            t!("Limpieza cancelada", "Cleaning cancelled")
         } else if done == 0 {
-            "No se ha limpiado nada".to_string()
+            t!("No se ha limpiado nada", "Nothing was cleaned")
         } else {
-            "Hecho".to_string()
+            t!("Hecho", "Done")
         };
         let subtitle: String = if simulated && result.cancelled {
-            "Esto es lo que habría pasado hasta ahí. No se ha tocado nada.".to_string()
+            t!(
+                "Esto es lo que habría pasado hasta ahí. No se ha tocado nada.",
+                "This is what would have happened up to that point. Nothing was touched."
+            )
+            .to_string()
         } else if simulated {
-            "Esto es lo que habría pasado. No se ha tocado nada.".to_string()
+            t!(
+                "Esto es lo que habría pasado. No se ha tocado nada.",
+                "This is what would have happened. Nothing was touched."
+            )
+            .to_string()
         } else if result.cancelled {
-            format!(
+            tf!(
                 "Se ha parado a mitad: {} de {} estaban hechos.",
+                "Stopped partway: {} of {} were done.",
                 result.report.outcomes.len(),
                 result.attempted
             )
         } else {
-            format!(
+            tf!(
                 "{} de {}.",
-                plural(done, "elemento listo", "elementos listos"),
+                "{} of {} done.",
+                plural(
+                    done,
+                    t!("elemento listo", "item"),
+                    t!("elementos listos", "items")
+                ),
                 result.attempted
             )
         };
@@ -102,25 +119,35 @@ impl Shell {
                                 .items_start()
                                 .child(result_figure(
                                     match (simulated, estimated) {
-                                        (true, true) => "Se habría liberado, aprox.",
-                                        (true, false) => "Se habría liberado",
-                                        (false, true) => "Liberado ahora, aprox.",
-                                        (false, false) => "Liberado ahora",
+                                        (true, true) => t!("Se habría liberado, aprox.", "Would be freed, approx."),
+                                        (true, false) => t!("Se habría liberado", "Would be freed"),
+                                        (false, true) => t!("Liberado ahora, aprox.", "Freed now, approx."),
+                                        (false, false) => t!("Liberado ahora", "Freed now"),
                                     },
                                     freed,
                                     if freed > 0 { theme::green() } else { theme::text_3() },
                                     match (simulated, estimated) {
-                                        (_, true) => "Parte es lo que estimó el escaneo: herramientas como Docker o pnpm pueden liberar menos.",
-                                        (true, false) => "Espacio libre al momento.",
-                                        (false, false) => "Ya es espacio libre en tu disco.",
+                                        (_, true) => t!(
+                                            "Parte es lo que estimó el escaneo: herramientas como Docker o pnpm pueden liberar menos.",
+                                            "Part of it is the scan's estimate: tools like Docker or pnpm may free less."
+                                        ),
+                                        (true, false) => t!("Espacio libre al momento.", "Freed right away."),
+                                        (false, false) => t!("Ya es espacio libre en tu disco.", "Already free on your disk."),
                                     },
                                 ))
                                 .when(trashed > 0, |this| {
                                     this.child(result_figure(
-                                        if simulated { "Habría ido a la Papelera" } else { "En la Papelera" },
+                                        if simulated {
+                                            t!("Habría ido a la Papelera", "Would have gone to the Trash")
+                                        } else {
+                                            t!("En la Papelera", "In the Trash")
+                                        },
                                         trashed,
                                         theme::amber(),
-                                        "Aún ocupa espacio, y se puede recuperar. No queda libre hasta que vacíes la Papelera.",
+                                        t!(
+                                            "Aún ocupa espacio, y se puede recuperar. No queda libre hasta que vacíes la Papelera.",
+                                            "Still takes up space, and you can get it back. It isn't freed until you empty the Trash."
+                                        ),
                                     ))
                                 }),
                         )
@@ -128,13 +155,16 @@ impl Shell {
                     .when(needs_app_management, |this| {
                         this.child(notice(
                             NoticeKind::Warning,
-                            "macOS protege esta app",
+                            t!("macOS protege esta app", "macOS protects this app"),
                             Some(
-                                "Para poder desinstalarla, concede a HealthyMac el permiso «Gestión de apps» en Ajustes del Sistema, dentro de Privacidad y seguridad, y vuelve a intentarlo."
-                                    .into(),
+                                t!(
+                                    "Para poder desinstalarla, concede a HealthyMac el permiso «Gestión de apps» en Ajustes del Sistema, dentro de Privacidad y seguridad, y vuelve a intentarlo.",
+                                    "To uninstall it, give HealthyMac the “App Management” permission in System Settings, under Privacy & Security, then try again."
+                                )
+                                .into(),
                             ),
                             Some(
-                                Btn::secondary("Abrir Ajustes")
+                                Btn::secondary(t!("Abrir Ajustes", "Open Settings"))
                                     .size(BtnSize::Sm)
                                     .icon(Icon::External)
                                     .build(
@@ -151,14 +181,30 @@ impl Shell {
                                 .fs(font::CAPTION)
                                 .text_color(theme::text_2())
                                 .child(match (failures, skipped) {
-                                    (0, 1) => "1 elemento se ha quedado sin tocar:".to_string(),
-                                    (0, others) => format!("{others} elementos se han quedado sin tocar:"),
-                                    (1, 0) => "1 elemento no ha ido bien:".to_string(),
-                                    (bad, 0) => format!("{bad} elementos no han ido bien:"),
-                                    (1, 1) => "1 elemento no ha ido bien y otro se ha quedado sin tocar:".to_string(),
-                                    (1, others) => format!("1 elemento no ha ido bien y otros {others} se han quedado sin tocar:"),
-                                    (bad, 1) => format!("{bad} elementos no han ido bien y otro se ha quedado sin tocar:"),
-                                    (bad, others) => format!("{bad} elementos no han ido bien y otros {others} se han quedado sin tocar:"),
+                                    (0, 1) => t!("1 elemento se ha quedado sin tocar:", "1 item was left untouched:").to_string(),
+                                    (0, others) => tf!(
+                                        "{others} elementos se han quedado sin tocar:",
+                                        "{others} items were left untouched:"
+                                    ),
+                                    (1, 0) => t!("1 elemento no ha ido bien:", "1 item had a problem:").to_string(),
+                                    (bad, 0) => tf!("{bad} elementos no han ido bien:", "{bad} items had a problem:"),
+                                    (1, 1) => t!(
+                                        "1 elemento no ha ido bien y otro se ha quedado sin tocar:",
+                                        "1 item had a problem and another was left untouched:"
+                                    )
+                                    .to_string(),
+                                    (1, others) => tf!(
+                                        "1 elemento no ha ido bien y otros {others} se han quedado sin tocar:",
+                                        "1 item had a problem and {others} more were left untouched:"
+                                    ),
+                                    (bad, 1) => tf!(
+                                        "{bad} elementos no han ido bien y otro se ha quedado sin tocar:",
+                                        "{bad} items had a problem and another was left untouched:"
+                                    ),
+                                    (bad, others) => tf!(
+                                        "{bad} elementos no han ido bien y otros {others} se han quedado sin tocar:",
+                                        "{bad} items had a problem and {others} more were left untouched:"
+                                    ),
                                 }),
                         )
                     });
@@ -183,9 +229,10 @@ impl Shell {
                             .py(sp(2.5))
                             .fs(font::CAPTION)
                             .text_color(theme::text_2())
-                            .child(format!(
+                            .child(tf!(
                                 "Y {} más.",
-                                plural(hidden, "elemento", "elementos")
+                                "{} not shown.",
+                                plural(hidden, t!("elemento", "item"), t!("elementos", "items"))
                             )),
                     )
                 });
@@ -194,7 +241,7 @@ impl Shell {
             .relative()
             .flex_shrink()
             .min_h(px(0.))
-            .child(sheet_header(&title, &subtitle, cx))
+            .child(sheet_header(title, &subtitle, cx))
             .child(
                 div()
                     .id("result-body")
@@ -220,7 +267,7 @@ impl Shell {
                     .border_color(theme::hairline())
                     .when(trashed > 0, |this| {
                         this.child(
-                            Btn::secondary("Vaciar la Papelera…")
+                            Btn::secondary(t!("Vaciar la Papelera…", "Empty Trash…"))
                                 .icon(Icon::Trash)
                                 .build(
                                     "empty-trash",
@@ -230,7 +277,7 @@ impl Shell {
                                 ),
                         )
                     })
-                    .child(Btn::primary("Listo", theme::brand_stops()).build(
+                    .child(Btn::primary(t!("Listo", "Done")).build(
                         "result-done",
                         cx.listener(|this, _, _, cx| this.close_sheet(cx)),
                     )),
@@ -255,7 +302,14 @@ fn result_figure(
         .border_1()
         .border_color(theme::hairline())
         .child(eyebrow(label))
-        .child(big_number(human_size(bytes), font::TITLE, color))
+        // The result is read once, so its numbers may count up once as it appears.
+        .child(motion::counting_size(
+            format!("result-{label}"),
+            0,
+            bytes,
+            font::TITLE,
+            color,
+        ))
         .child(
             div()
                 .mt(sp(0.5))
@@ -265,13 +319,27 @@ fn result_figure(
         )
 }
 
+/// The error the cleaner records for an item it stopped at because the user cancelled. The engine
+/// writes it in the language of the moment, so both are recognised.
+fn is_cancelled_marker(error: &str) -> bool {
+    matches!(error, "cancelado" | "cancelled" | "canceled")
+}
+
+/// The cleaner's note for an item skipped because its app is open, in either language.
+fn is_open_app_note(message: &str) -> bool {
+    message.ends_with("está abierto") || message.ends_with("is open")
+}
+
 fn outcome_row(index: usize, title: String, outcome: &hm_core::CleanOutcome) -> AnyElement {
-    let cut_short = outcome.errors.iter().any(|error| error == "cancelado");
+    let cut_short = outcome
+        .errors
+        .iter()
+        .any(|error| is_cancelled_marker(error));
     let (label, color) = match outcome.status {
-        _ if cut_short => ("Cancelado", theme::text_3()),
-        CleanStatus::Failed => ("Falló", theme::rose()),
-        CleanStatus::Partial => ("A medias", theme::amber()),
-        _ => ("Omitido", theme::text_3()),
+        _ if cut_short => (t!("Cancelado", "Cancelled"), theme::text_3()),
+        CleanStatus::Failed => (t!("Falló", "Failed"), theme::rose()),
+        CleanStatus::Partial => (t!("A medias", "Partial"), theme::amber()),
+        _ => (t!("Omitido", "Skipped"), theme::text_3()),
     };
     let reason = outcome
         .errors
@@ -279,15 +347,22 @@ fn outcome_row(index: usize, title: String, outcome: &hm_core::CleanOutcome) -> 
         .filter(|_| !cut_short)
         .map(|error| {
             if blocked_by_app_management(&outcome.finding_id, error) {
-                "Falta el permiso «Gestión de apps».".to_string()
+                t!(
+                    "Falta el permiso «Gestión de apps».",
+                    "Missing the “App Management” permission."
+                )
+                .to_string()
             } else {
                 friendly_error(error)
             }
         })
         .or_else(|| {
             outcome.message.as_ref().map(|message| {
-                if message.ends_with("está abierto") {
-                    format!("{message}. Ciérralo y vuelve a intentarlo.")
+                if is_open_app_note(message) {
+                    tf!(
+                        "{message}. Ciérralo y vuelve a intentarlo.",
+                        "{message}. Quit it and try again."
+                    )
                 } else {
                     message.clone()
                 }
@@ -295,7 +370,11 @@ fn outcome_row(index: usize, title: String, outcome: &hm_core::CleanOutcome) -> 
         })
         .unwrap_or_else(|| {
             if cut_short {
-                "Lo paraste antes de llegar a este.".to_string()
+                t!(
+                    "Lo paraste antes de llegar a este.",
+                    "You stopped it before it got to this one."
+                )
+                .to_string()
             } else {
                 String::new()
             }

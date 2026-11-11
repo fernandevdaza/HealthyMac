@@ -19,7 +19,7 @@ use gpui::{
     actions, point, px, size, App, AppContext, Application, Bounds, KeyBinding, Menu, MenuItem,
     SystemMenuType, TitlebarOptions, WindowBackgroundAppearance, WindowBounds, WindowOptions,
 };
-use hm_core::{Config, ScanContext};
+use hm_core::{t, Config, ScanContext};
 
 use crate::state::{
     AppsState, DiskState, LiveState, ModelsState, Page, PortsState, ProjectsState, RunMode,
@@ -61,16 +61,62 @@ fn build_context(mode: &RunMode) -> (ScanContext, Option<String>) {
     }
 }
 
+/// The menu bar, in the current language. Built again when the language changes.
+pub fn menus() -> Vec<Menu> {
+    vec![
+        Menu {
+            name: "HealthyMac".into(),
+            items: vec![
+                MenuItem::action(t!("Ajustes…", "Settings…"), OpenSettings),
+                MenuItem::separator(),
+                MenuItem::os_submenu(t!("Servicios", "Services"), SystemMenuType::Services),
+                MenuItem::separator(),
+                MenuItem::action(t!("Ocultar HealthyMac", "Hide HealthyMac"), Hide),
+                MenuItem::action(t!("Ocultar otros", "Hide Others"), HideOthers),
+                MenuItem::action(t!("Mostrar todo", "Show All"), ShowAll),
+                MenuItem::separator(),
+                MenuItem::action(t!("Salir de HealthyMac", "Quit HealthyMac"), Quit),
+            ],
+        },
+        Menu {
+            name: t!("Ventana", "Window").into(),
+            items: vec![
+                MenuItem::action(t!("Minimizar", "Minimize"), Minimize),
+                MenuItem::action(t!("Zoom", "Zoom"), Zoom),
+                MenuItem::separator(),
+                MenuItem::action(t!("Cerrar", "Close"), CloseWindow),
+            ],
+        },
+    ]
+}
+
 fn main() {
     hm_core::threads::configure_global_pool();
+    ui::motion::read_system_preference();
     let mode = RunMode::from_env();
+    // Read the config before anything is drawn, so the first frame and the menu bar are already in
+    // the right language.
+    let (mut ctx, config_error) = build_context(&mode);
+    // For screenshots and testing: force a language or theme without touching the saved settings.
+    match std::env::var("HEALTHYMAC_LANG").as_deref() {
+        Ok("es") => ctx.config.language = hm_core::LanguageChoice::Spanish,
+        Ok("en") => ctx.config.language = hm_core::LanguageChoice::English,
+        _ => {}
+    }
+    match std::env::var("HEALTHYMAC_THEME").as_deref() {
+        Ok("light") => ctx.config.appearance = hm_core::Appearance::Light,
+        Ok("dark") => ctx.config.appearance = hm_core::Appearance::Dark,
+        _ => {}
+    }
+    hm_core::i18n::set_language(flows::language::resolve(ctx.config.language));
+    let mut first_context = Some((ctx, config_error));
     // For automated testing: open without taking focus from whatever the user is doing.
     let background = std::env::var_os("HEALTHYMAC_BACKGROUND").is_some();
 
     Application::new()
         .with_assets(assets::Assets)
         .run(move |cx: &mut App| {
-            dock_icon::apply();
+            dock_icon::apply(dock_icon::system_is_dark());
             cx.on_action(|_: &Quit, cx| cx.quit());
             cx.on_action(|_: &Hide, cx| cx.hide());
             cx.on_action(|_: &HideOthers, cx| cx.hide_other_apps());
@@ -83,31 +129,7 @@ fn main() {
                 KeyBinding::new("cmd-w", CloseWindow, None),
                 KeyBinding::new("cmd-,", OpenSettings, None),
             ]);
-            cx.set_menus(vec![
-                Menu {
-                    name: "HealthyMac".into(),
-                    items: vec![
-                        MenuItem::action("Ajustes…", OpenSettings),
-                        MenuItem::separator(),
-                        MenuItem::os_submenu("Servicios", SystemMenuType::Services),
-                        MenuItem::separator(),
-                        MenuItem::action("Ocultar HealthyMac", Hide),
-                        MenuItem::action("Ocultar otros", HideOthers),
-                        MenuItem::action("Mostrar todo", ShowAll),
-                        MenuItem::separator(),
-                        MenuItem::action("Salir de HealthyMac", Quit),
-                    ],
-                },
-                Menu {
-                    name: "Ventana".into(),
-                    items: vec![
-                        MenuItem::action("Minimizar", Minimize),
-                        MenuItem::action("Zoom", Zoom),
-                        MenuItem::separator(),
-                        MenuItem::action("Cerrar", CloseWindow),
-                    ],
-                },
-            ]);
+            cx.set_menus(menus());
             // This is a one-window app: closing it means you are done.
             cx.on_window_closed(|cx| {
                 if cx.windows().is_empty() {
@@ -140,12 +162,9 @@ fn main() {
                         cx.new(|cx| {
                             let focus = cx.focus_handle();
                             focus.focus(window);
-                            let (ctx, config_error) = build_context(&mode);
-                            let scanners = if mode.demo {
-                                demo::scan::meta(mode.stress)
-                            } else {
-                                flows::scan::scanner_meta(&flows::scan::all_scanners())
-                            };
+                            let (ctx, config_error) =
+                                first_context.take().unwrap_or_else(|| build_context(&mode));
+                            let scanners = flows::scan::scanners_for(&mode);
                             let mut shell = Shell {
                                 mode,
                                 ctx,
@@ -169,10 +188,13 @@ fn main() {
                                 disk: DiskState::default(),
                                 settings: SettingsState::default(),
                                 sheet: None,
+                                sheet_closing: false,
+                                sheet_opened: 0,
                                 toast: None,
                                 toast_serial: 0,
                                 titlebar_pressed: false,
                             };
+                            shell.watch_appearance(window, cx);
                             shell.start_background_loops(cx);
                             #[cfg(debug_assertions)]
                             drive::start(window, cx);

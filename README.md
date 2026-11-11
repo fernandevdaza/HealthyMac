@@ -1,26 +1,27 @@
 <p align="right"><b>English</b> · <a href="README.es.md">Español</a></p>
 
 <p align="center">
-  <img src="docs/banner.png" alt="HealthyMac — Clean your Mac, honestly" width="100%">
+  <img src="docs/banner.png" alt="HealthyMac: Clean your Mac, honestly" width="100%">
 </p>
 
 <p align="center">
   <b>See what is really eating your disk and get it back safely.<br>
   HealthyMac knows what APFS clones actually free, understands your build folders and your local AI models,<br>
-  and sends everything to the Trash first — a free, open-source alternative to CleanMyMac, written in Rust.</b>
+  and sends everything to the Trash first. A free, open-source alternative to CleanMyMac, written in Rust.</b>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.1.0-2dd4bf?style=flat-square" alt="version 0.1.0">
-  <img src="https://img.shields.io/badge/tests-662-22c55e?style=flat-square" alt="662 tests">
-  <img src="https://img.shields.io/badge/AI%20runtimes-14-8b5cf6?style=flat-square" alt="14 AI runtimes">
-  <img src="https://img.shields.io/badge/pages-12-f59e0b?style=flat-square" alt="12 pages">
-  <img src="https://img.shields.io/badge/UI-Spanish-60a5fa?style=flat-square" alt="Interface in Spanish">
+  <img src="https://img.shields.io/badge/version-0.1.0-6e6e73?style=flat-square&labelColor=3a3a3c" alt="version 0.1.0">
+  <img src="https://img.shields.io/badge/tests-672%20passing-248a3d?style=flat-square&labelColor=3a3a3c" alt="672 tests passing">
+  <img src="https://img.shields.io/badge/AI%20runtimes-14-6e6e73?style=flat-square&labelColor=3a3a3c" alt="14 AI runtimes">
+  <img src="https://img.shields.io/badge/pages-12-6e6e73?style=flat-square&labelColor=3a3a3c" alt="12 pages">
+  <img src="https://img.shields.io/badge/UI-English%20%7C%20Spanish-6e6e73?style=flat-square&labelColor=3a3a3c" alt="Interface in English and Spanish">
+  <img src="https://img.shields.io/badge/theme-light%20%7C%20dark-6e6e73?style=flat-square&labelColor=3a3a3c" alt="Light and dark theme">
   <br>
-  <img src="https://img.shields.io/badge/Rust-stable-ce422b?style=flat-square&logo=rust&logoColor=white" alt="Rust">
-  <img src="https://img.shields.io/badge/GPUI-Metal-5eead4?style=flat-square" alt="GPUI on Metal">
-  <img src="https://img.shields.io/badge/macOS-Apple%20Silicon-111827?style=flat-square&logo=apple&logoColor=white" alt="macOS on Apple Silicon">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-94a3b8?style=flat-square" alt="GPL-3.0 license"></a>
+  <img src="https://img.shields.io/badge/Rust-stable-6e6e73?style=flat-square&labelColor=3a3a3c&logo=rust&logoColor=white" alt="Rust">
+  <img src="https://img.shields.io/badge/GPUI-Metal-6e6e73?style=flat-square&labelColor=3a3a3c" alt="GPUI on Metal">
+  <img src="https://img.shields.io/badge/macOS-Apple%20Silicon-6e6e73?style=flat-square&labelColor=3a3a3c&logo=apple&logoColor=white" alt="macOS on Apple Silicon">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-6e6e73?style=flat-square&labelColor=3a3a3c" alt="GPL-3.0 license"></a>
 </p>
 
 <p align="center">
@@ -33,7 +34,7 @@
 
 <div align="center">
 
-| **Real sizes** | **14 AI runtimes** | **Trash first** | **662 tests** | **12 MB** |
+| **Real sizes** | **14 AI runtimes** | **Trash first** | **672 tests** | **12 MB** |
 |:---:|:---:|:---:|:---:|:---:|
 | APFS clones and hard links accounted for | one inventory, checked against Metal's memory limit | every path re-checked right before acting | safety, scanners and parsers | ~1% CPU and ~100 MB of RAM at rest |
 
@@ -69,27 +70,30 @@
 - **Disk map and monitor.** A navigable treemap, plus CPU, memory, network, temperature, battery and processes.
 - **Apps and startup.** Size, leftovers and architecture of each app, an uninstaller, and startup items with the
   orphaned ones flagged.
+- **Looks like a Mac app.** Neutral greys and SF Pro; colour shows up only when it says something, like a risk level,
+  memory pressure or a series in a chart. Light or dark, English or Spanish: it follows macOS (English for any language
+  other than Spanish), or you choose in Settings.
 - **A command line.** `healthymac scan --json` and friends, for scripts.
 
 ## 📸 Screenshots
 
-<sub>Demo mode: all the data is made up.</sub>
+<sub>Demo mode: all the data is made up. The images follow your GitHub theme, light or dark.</sub>
 
 <table>
   <tr>
-    <td colspan="2"><img src="docs/screenshots/overview.jpg" alt="Overview"><p align="center"><sub><b>Overview</b> · health score with its reasons, disk use by area and what you can recover</sub></p></td>
+    <td colspan="2"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/overview-en-dark.jpg"><img src="docs/screenshots/overview-en-light.jpg" alt="Overview"></picture><p align="center"><sub><b>Overview</b> · health score with its reasons, disk use by area and what you can recover</sub></p></td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/screenshots/models.jpg" alt="Models"><p align="center"><sub><b>Models</b> · memory budget, running runtimes and repeated copies</sub></p></td>
-    <td width="50%"><img src="docs/screenshots/developer.jpg" alt="Developer"><p align="center"><sub><b>Developer</b> · Xcode, package caches and build folders of idle projects</sub></p></td>
+    <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/models-en-dark.jpg"><img src="docs/screenshots/models-en-light.jpg" alt="Models"></picture><p align="center"><sub><b>Models</b> · memory budget, running runtimes and repeated copies</sub></p></td>
+    <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/developer-en-dark.jpg"><img src="docs/screenshots/developer-en-light.jpg" alt="Developer"></picture><p align="center"><sub><b>Developer</b> · Xcode, package caches and build folders of idle projects</sub></p></td>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/review.jpg" alt="Review before cleaning"><p align="center"><sub><b>Review</b> · what goes to the Trash, what is freed now and what stays</sub></p></td>
-    <td><img src="docs/screenshots/disk-map.jpg" alt="Disk map"><p align="center"><sub><b>Disk map</b> · click a folder to walk into it</sub></p></td>
+    <td><picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/review-en-dark.jpg"><img src="docs/screenshots/review-en-light.jpg" alt="Review before cleaning"></picture><p align="center"><sub><b>Review</b> · what goes to the Trash, what is freed now and what stays</sub></p></td>
+    <td><picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/disk-map-en-dark.jpg"><img src="docs/screenshots/disk-map-en-light.jpg" alt="Disk map"></picture><p align="center"><sub><b>Disk map</b> · click a folder to walk into it</sub></p></td>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/projects.jpg" alt="Projects"><p align="center"><sub><b>Projects</b> · activity, artifacts, git state and Docker</sub></p></td>
-    <td><img src="docs/screenshots/monitor.jpg" alt="Monitor"><p align="center"><sub><b>Monitor</b> · live CPU, memory, network, temperature and battery</sub></p></td>
+    <td><picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/projects-en-dark.jpg"><img src="docs/screenshots/projects-en-light.jpg" alt="Projects"></picture><p align="center"><sub><b>Projects</b> · activity, artifacts, git state and Docker</sub></p></td>
+    <td><picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/monitor-en-dark.jpg"><img src="docs/screenshots/monitor-en-light.jpg" alt="Monitor"></picture><p align="center"><sub><b>Monitor</b> · live CPU, memory, network, temperature and battery</sub></p></td>
   </tr>
 </table>
 
@@ -153,8 +157,9 @@ cargo test --workspace
 | `hm-system` | 215 | Scanners, permission guards, health score, disk tree, monitor parsers |
 | `hm-ai` | 192 | GGUF parsing, model stores, memory fit, duplicates, runtimes |
 | `hm-dev` | 154 | Artifact rules and project activity, package caches, Docker, ports |
-| `hm-core` | 67 | Safety policy, cleaner, APFS sizes, cloning |
-| `hm-app` | 34 | Selection logic, treemap layout |
+| `hm-core` | 72 | Safety policy, cleaner, APFS sizes, cloning, the `t!` macro |
+| `hm-app` | 38 | Selection logic, treemap layout, list grouping, text truncation |
+| `hm-cli` | 1 | Language from the locale |
 
 Two more tests exercise the real Trash, and are ignored by default because they leave tiny files in it.
 
@@ -164,8 +169,7 @@ Two more tests exercise the real Trash, and are ignored by default because they 
 **Only tested against fixtures:** uninstalling an app, `ollama rm`, Full Disk Access mode, and the Ollama, Jan, GPT4All,
 ComfyUI, Automatic1111 and Draw Things stores.
 
-**Not tested:** other macOS versions (it declares 13+) and other Macs. There's no light theme yet, and the interface is
-only in Spanish.
+**Not tested:** other macOS versions (it declares 13+) and other Macs.
 
 ## 🛠️ Development
 
@@ -190,13 +194,16 @@ crates/
   hm-app/     the desktop app, built with GPUI
 ```
 
-Rules and structure are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (in Spanish). To catch permission dialogs, launch
-the app with `open`: from a terminal, macOS attributes the access to the terminal and the problem doesn't show.
+Rules and structure are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), and the visual design in
+[docs/DESIGN.md](docs/DESIGN.md) (both in Spanish). To catch permission dialogs, launch the app with `open`: from a
+terminal, macOS attributes the access to the terminal and the problem doesn't show. `HEALTHYMAC_LANG=en|es` and
+`HEALTHYMAC_THEME=light|dark` force a language or theme without touching your settings.
 
 ## 🤝 Contributing
 
-Contributions are welcome, especially reports from other Macs and macOS versions, new tools and runtimes, and an
-English interface. Issues and pull requests in Spanish or English.
+Contributions are welcome, especially reports from other Macs and macOS versions, new tools and runtimes, and more
+languages. Every user-facing string is written with `t!("español", "English")`; see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Issues and pull requests in Spanish or English.
 
 ## 📄 License
 

@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use hm_core::ScanContext;
+use hm_core::{t, ScanContext};
 
 use super::{newest, Leftover, LeftoverKind, RawModel, StoreScan, ABANDONED_MIN_DAYS};
 use crate::files::{link_target, name_of, older_than, relative, walk, FileRec};
@@ -259,7 +259,7 @@ pub(crate) fn scan_lm_temp(roots: &Roots, ctx: &ScanContext) -> StoreScan {
     });
     out.leftovers.extend(partial_leftover(
         RuntimeKind::LmStudio,
-        "descargas temporales".to_string(),
+        t!("descargas temporales", "temporary downloads").to_string(),
         &dir,
         partials,
         ctx,

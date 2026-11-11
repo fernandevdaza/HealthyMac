@@ -175,7 +175,12 @@ impl Shell {
                     hm_dev::ports::list_listening()
                 }
             },
-            |shell, result, _cx| shell.ports.ports.finish(result),
+            |shell, result, _cx| {
+                shell
+                    .ports
+                    .ports
+                    .finish(result.map(crate::logic::ports::merge_addresses))
+            },
         );
         cx.notify();
     }

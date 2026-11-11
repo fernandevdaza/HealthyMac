@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use hm_core::fmt::human_size;
-use hm_core::{fsutil, Action, Area, Finding, Recovery, Risk, ScanContext, Scanner};
+use hm_core::{fsutil, t, tf, Action, Area, Finding, Recovery, Risk, ScanContext, Scanner};
 use rayon::prelude::*;
 
 use super::walk::{self, UserFile};
@@ -27,10 +27,13 @@ impl Scanner for Duplicates {
         SCANNER_ID
     }
     fn name(&self) -> &'static str {
-        "Archivos duplicados"
+        t!("Archivos duplicados", "Duplicate files")
     }
     fn description(&self) -> &'static str {
-        "Copias idénticas del mismo archivo que ocupan espacio de verdad."
+        t!(
+            "Copias idénticas del mismo archivo que ocupan espacio de verdad.",
+            "Identical copies of the same file that really take up space."
+        )
     }
     fn area(&self) -> Area {
         Area::Files
@@ -51,9 +54,14 @@ pub(crate) fn scan_duplicates(ctx: &ScanContext, min_bytes: u64) -> Vec<Finding>
         findings.push(gate::missing_access_finding(
             SCANNER_ID,
             Area::Files,
-            "Sin el Acceso total al disco no se buscan duplicados en Documentos, Escritorio, \
-             Descargas ni Música, que es donde más suelen acumularse. Con el permiso, HealthyMac \
-             también comparará esos archivos.",
+            t!(
+                "Sin el Acceso total al disco no se buscan duplicados en Documentos, Escritorio, \
+                 Descargas ni Música, que es donde más suelen acumularse. Con el permiso, HealthyMac \
+                 también comparará esos archivos.",
+                "Without Full Disk Access, duplicates are not searched for in Documents, Desktop, \
+                 Downloads or Music, where they pile up the most. With the permission, HealthyMac \
+                 will compare those files too."
+            ),
         ));
     }
     findings
@@ -180,7 +188,7 @@ fn group_finding(ctx: &ScanContext, hash: &str, mut files: Vec<UserFile>) -> Opt
         .map(|path| path.display().to_string())
         .collect();
     if extra.len() > LISTED_PATHS {
-        listed.push(format!("y {} más", extra.len() - LISTED_PATHS));
+        listed.push(tf!("y {} más", "and {} more", extra.len() - LISTED_PATHS));
     }
     let count = extra.len() as u64;
     Some(
@@ -189,12 +197,14 @@ fn group_finding(ctx: &ScanContext, hash: &str, mut files: Vec<UserFile>) -> Opt
             Area::Files,
             // The content hash, so a selection survives the files being moved around.
             &hash[..hash.len().min(16)],
-            format!("{name}: {} copias", extra.len() + 1),
+            tf!("{name}: {} copias", "{name}: {} copies", extra.len() + 1),
         )
-        .subtitle(format!("Se conserva {}", keep.path.display()))
-        .explanation(format!(
+        .subtitle(tf!("Se conserva {}", "Keeping {}", keep.path.display()))
+        .explanation(tf!(
             "Archivos idénticos byte a byte, de {} cada uno. Se conserva una copia y el resto va a \
              la Papelera: {}. Comprueba que ninguna app o proyecto dependa de esa ubicación.",
+            "Files identical byte for byte, {} each. One copy is kept and the rest go to the \
+             Trash: {}. Check that no app or project depends on that location.",
             human_size(keep.logical),
             listed.join(", ")
         ))

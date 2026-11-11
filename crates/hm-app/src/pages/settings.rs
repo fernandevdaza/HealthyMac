@@ -4,31 +4,33 @@ use std::path::PathBuf;
 
 use gpui::{div, prelude::*, px, AnyElement, Context, ElementId, FontWeight, SharedString, Window};
 use hm_core::fmt::{human_age, human_size};
-use hm_core::{CleanStatus, RemovalMode};
+use hm_core::{t, tf, Appearance, CleanStatus, LanguageChoice, RemovalMode};
 
 use super::{plural, scroll_pane};
 use crate::assets::Icon;
 use crate::state::Shell;
 use crate::theme::{self, font, radius, sp, GUTTER};
 use crate::ui::chrome::{card, notice, page_header, section_title, NoticeKind};
-use crate::ui::controls::{icon_button, pill, stepper, Btn, BtnSize};
+use crate::ui::controls::{icon_button, pill, segmented, stepper, Btn, BtnSize};
 use crate::ui::label::path_label;
 use crate::ui::{col, icon, row, TextExt};
-
-const FDA_URL: &str = "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles";
 
 impl Shell {
     pub fn render_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let width = (super::content_width(window) - GUTTER * 2.0).min(720.0);
         let subtitle = if self.mode.persists_config() {
-            "Se guarda al momento.".to_string()
+            t!("Se guarda al momento.", "Changes are saved right away.").to_string()
         } else {
-            "En este modo los cambios duran hasta que cierres la app: no se guardan.".to_string()
+            t!(
+                "En este modo los cambios duran hasta que cierres la app: no se guardan.",
+                "In this mode, changes last until you quit the app. They are not saved."
+            )
+            .to_string()
         };
         let pane = self.settings.scroll.clone();
         col()
             .size_full()
-            .child(page_header("Ajustes", subtitle, Vec::new()))
+            .child(page_header(t!("Ajustes", "Settings"), subtitle, Vec::new()))
             .child(scroll_pane(
                 "settings-scroll",
                 &pane,
@@ -40,7 +42,10 @@ impl Shell {
                     .when_some(self.config_error.clone(), |this, error| {
                         this.child(notice(
                             NoticeKind::Warning,
-                            "Tu configuración no se ha podido leer, así que usamos la de fábrica",
+                            t!(
+                                "Tu configuración no se ha podido leer, así que usamos la de fábrica",
+                                "Your settings couldn't be read, so we're using the defaults"
+                            ),
                             Some(error.into()),
                             None,
                         ))
@@ -48,11 +53,12 @@ impl Shell {
                     .when_some(self.settings.save_error.clone(), |this, error| {
                         this.child(notice(
                             NoticeKind::Error,
-                            "No se ha podido guardar el cambio",
+                            t!("No se ha podido guardar el cambio", "The change couldn't be saved"),
                             Some(error.into()),
                             None,
                         ))
                     })
+                    .child(self.render_appearance(cx))
                     .child(self.render_removal_mode(cx))
                     .child(self.render_access(cx))
                     .child(self.render_project_settings(cx))
@@ -64,19 +70,25 @@ impl Shell {
 
     fn render_removal_mode(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let mode = self.ctx.config.removal_mode;
-        section("Al limpiar")
+        section(t!("Al limpiar", "When cleaning"))
             .child(self.mode_option(
                 RemovalMode::Trash,
                 mode,
-                "Mover a la Papelera",
-                "Lo más prudente: todo se puede recuperar. A cambio, el espacio no se libera hasta que vacías la Papelera.",
+                t!("Mover a la Papelera", "Move to Trash"),
+                t!(
+                    "Lo más prudente: todo se puede recuperar. A cambio, el espacio no se libera hasta que vacías la Papelera.",
+                    "The safest choice: everything can be recovered. The catch is that no space is freed until you empty the Trash."
+                ),
                 cx,
             ))
             .child(self.mode_option(
                 RemovalMode::DeleteRegenerable,
                 mode,
-                "Borrar lo que se regenera solo",
-                "Lo seguro que se regenera (cachés, compilaciones) se borra al momento y libera espacio ya. Todo lo demás sigue yendo a la Papelera.",
+                t!("Borrar lo que se regenera solo", "Delete what rebuilds itself"),
+                t!(
+                    "Lo seguro que se regenera (cachés, compilaciones) se borra al momento y libera espacio ya. Todo lo demás sigue yendo a la Papelera.",
+                    "Safe items that rebuild themselves (caches, builds) are deleted at once and free space now. Everything else still goes to the Trash."
+                ),
                 cx,
             ))
     }
@@ -90,17 +102,17 @@ impl Shell {
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let selected = value == current;
-        let accent = theme::teal();
+        let accent = theme::primary();
         row()
             .id(SharedString::from(format!("removal-{value:?}")))
             .gap(sp(3.))
             .items_start()
             .p(sp(3.))
-            .rounded(px(radius::LG))
+            .rounded(px(radius::MD))
             .border_1()
             .cursor_pointer()
             .when(selected, |this| {
-                this.bg(accent.alpha(0.07)).border_color(accent.alpha(0.35))
+                this.bg(theme::surface_1()).border_color(accent.alpha(0.55))
             })
             .when(!selected, |this| {
                 this.bg(theme::surface_1())
@@ -122,12 +134,7 @@ impl Shell {
                         this.border_1().border_color(theme::hairline_strong())
                     })
                     .when(selected, |this| {
-                        this.child(
-                            div()
-                                .size(px(6.))
-                                .rounded_full()
-                                .bg(theme::text_on_accent()),
-                        )
+                        this.child(div().size(px(6.)).rounded_full().bg(theme::on_primary()))
                     }),
             )
             .child(
@@ -152,7 +159,7 @@ impl Shell {
 
     fn render_access(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let access = self.settings.full_disk_access;
-        section("Acceso total al disco").child(
+        section(t!("Acceso total al disco", "Full Disk Access")).child(
             card()
                 .w_full()
                 .p(sp(3.5))
@@ -172,9 +179,9 @@ impl Shell {
                                 .gap(sp(0.5))
                                 .child(
                                     div().fs(font::BODY).font_weight(FontWeight::MEDIUM).child(match access {
-                                        Some(true) => "Concedido",
-                                        Some(false) => "Sin conceder",
-                                        None => "Comprobando…",
+                                        Some(true) => t!("Concedido", "Granted"),
+                                        Some(false) => t!("Sin conceder", "Not granted"),
+                                        None => t!("Comprobando…", "Checking…"),
                                     }),
                                 )
                                 .child(
@@ -182,19 +189,25 @@ impl Shell {
                                         .fs(font::CAPTION)
                                         .text_color(theme::text_2())
                                         .child(match access {
-                                            Some(true) => "HealthyMac ve todo el disco: Documentos, Descargas, Escritorio y los datos de las apps. Sigue sin borrar nada que no le pidas.",
-                                            _ => "Sin este permiso no miramos Documentos, Descargas, Escritorio ni los datos internos de las apps, así que el mapa de disco y los archivos grandes se quedan cortos. Con él lo vemos todo, y sigue sin borrarse nada que no pidas. Se concede en Ajustes del Sistema y se puede retirar cuando quieras.",
+                                            Some(true) => t!(
+                                                "HealthyMac ve todo el disco: Documentos, Descargas, Escritorio y los datos de las apps. Sigue sin borrar nada que no le pidas.",
+                                                "HealthyMac can see the whole disk: Documents, Downloads, Desktop and app data. It still deletes nothing you don't ask for."
+                                            ),
+                                            _ => t!(
+                                                "Sin este permiso no miramos Documentos, Descargas, Escritorio ni los datos internos de las apps, así que el mapa de disco y los archivos grandes se quedan cortos. Con él lo vemos todo, y sigue sin borrarse nada que no pidas. Se concede en Ajustes del Sistema y se puede retirar cuando quieras.",
+                                                "Without this permission we can't look in Documents, Downloads, Desktop or app data, so the disk map and large files come up short. With it we see everything, and still nothing is deleted unless you ask. You grant it in System Settings and can take it back at any time."
+                                            ),
                                         }),
                                 ),
                         )
                         .when(access != Some(true), |this| {
                             this.child(
-                                Btn::secondary("Abrir Ajustes")
+                                Btn::secondary(t!("Abrir Ajustes", "Open Settings"))
                                     .size(BtnSize::Sm)
                                     .icon(Icon::External)
                                     .build(
                                         "fda-open",
-                                        cx.listener(|_, _, _, cx| cx.open_url(FDA_URL)),
+                                        cx.listener(|_, _, _, cx| cx.open_url(super::FULL_DISK_ACCESS_URL)),
                                     ),
                             )
                         }),
@@ -202,21 +215,86 @@ impl Shell {
         )
     }
 
+    fn render_appearance(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let labels: [SharedString; 3] = [
+            t!("Sistema", "System").into(),
+            t!("Claro", "Light").into(),
+            t!("Oscuro", "Dark").into(),
+        ];
+        let selected = match self.ctx.config.appearance {
+            Appearance::System => 0,
+            Appearance::Light => 1,
+            Appearance::Dark => 2,
+        };
+        let entity = cx.entity().downgrade();
+        let languages: [SharedString; 3] = [
+            t!("Sistema", "System").into(),
+            "Español".into(),
+            "English".into(),
+        ];
+        let language = match self.ctx.config.language {
+            LanguageChoice::System => 0,
+            LanguageChoice::Spanish => 1,
+            LanguageChoice::English => 2,
+        };
+        let language_entity = cx.entity().downgrade();
+        section(t!("Apariencia e idioma", "Appearance and language"))
+            .child(setting_row(
+                t!("Idioma", "Language"),
+                t!(
+                    "Sistema usa el primer idioma de macOS. Lo ya escaneado cambia al volver a escanear.",
+                    "System uses your first macOS language. What was already scanned changes when you scan again."
+                ),
+                segmented("language", &languages, language, move |index, window, cx| {
+                    let value = match index {
+                        1 => LanguageChoice::Spanish,
+                        2 => LanguageChoice::English,
+                        _ => LanguageChoice::System,
+                    };
+                    language_entity
+                        .update(cx, |shell, cx| shell.set_language_choice(value, window, cx))
+                        .ok();
+                })
+                .into_any_element(),
+            ))
+            .child(setting_row(
+            t!("Tema", "Theme"),
+            t!(
+                "Sistema sigue el modo claro u oscuro de macOS.",
+                "System follows the light or dark mode of macOS."
+            ),
+            segmented("appearance", &labels, selected, move |index, window, cx| {
+                let value = match index {
+                    1 => Appearance::Light,
+                    2 => Appearance::Dark,
+                    _ => Appearance::System,
+                };
+                entity
+                    .update(cx, |shell, cx| shell.set_appearance(value, window, cx))
+                    .ok();
+            })
+            .into_any_element(),
+        ))
+    }
+
     fn render_project_settings(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let days = self.ctx.config.project_idle_days;
         let min_large = self.ctx.config.large_file_min_bytes;
         let roots = self.ctx.config.project_roots.clone();
         let effective = self.ctx.config.effective_project_roots(&self.ctx.home);
-        section("Proyectos y archivos")
+        section(t!("Proyectos y archivos", "Projects and files"))
             .child(setting_row(
-                "Un proyecto está parado tras",
-                "A partir de ahí se marca como parado en Proyectos.",
+                t!("Un proyecto está parado tras", "A project is idle after"),
+                t!(
+                    "A partir de ahí se marca como parado en Proyectos.",
+                    "After that, Projects marks it as idle."
+                ),
                 stepper(
                     "idle-days",
                     if days == 1 {
-                        "1 día".to_string()
+                        t!("1 día", "1 day").to_string()
                     } else {
-                        format!("{days} días")
+                        tf!("{days} días", "{days} days")
                     },
                     cx.listener(|this, _, _, cx| {
                         this.update_config(cx, |config| {
@@ -235,8 +313,11 @@ impl Shell {
                 .into_any_element(),
             ))
             .child(setting_row(
-                "Un archivo es grande desde",
-                "Desde ese tamaño aparece en Archivos. Se aplica en el siguiente escaneo.",
+                t!("Un archivo es grande desde", "A file counts as large from"),
+                t!(
+                    "Desde ese tamaño aparece en Archivos. Se aplica en el siguiente escaneo.",
+                    "From that size on, it shows up in Files. Applies on the next scan."
+                ),
                 stepper(
                     "large-file",
                     human_size(min_large),
@@ -256,11 +337,14 @@ impl Shell {
                 .into_any_element(),
             ))
             .child(path_list(
-                "Carpetas de proyectos",
+                t!("Carpetas de proyectos", "Project folders"),
                 if roots.is_empty() {
-                    "Miramos en las carpetas habituales. Añade las tuyas para mirar solo en ellas."
+                    t!(
+                        "Miramos en las carpetas habituales. Añade las tuyas para mirar solo en ellas.",
+                        "We look in the usual folders. Add your own to look only in those."
+                    )
                 } else {
-                    "Solo miramos en estas."
+                    t!("Solo miramos en estas.", "We only look in these.")
                 },
                 "project-root",
                 if roots.is_empty() { &effective } else { &roots },
@@ -270,7 +354,7 @@ impl Shell {
             ))
             .child(
                 row().child(
-                    Btn::secondary("Añadir carpeta…")
+                    Btn::secondary(t!("Añadir carpeta…", "Add folder…"))
                         .size(BtnSize::Sm)
                         .icon(Icon::Plus)
                         .build(
@@ -291,13 +375,19 @@ impl Shell {
 
     fn render_excluded(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let excluded = self.ctx.config.excluded_paths.clone();
-        section("Nunca tocar")
+        section(t!("Nunca tocar", "Never touch"))
             .child(path_list(
-                "Rutas excluidas",
+                t!("Rutas excluidas", "Excluded paths"),
                 if excluded.is_empty() {
-                    "Nada excluido. Lo que añadas aquí queda fuera de cualquier limpieza, pase lo que pase."
+                    t!(
+                        "Nada excluido. Lo que añadas aquí queda fuera de cualquier limpieza, pase lo que pase.",
+                        "Nothing excluded. Anything you add here is left out of every cleanup, no matter what."
+                    )
                 } else {
-                    "Quedan fuera de cualquier limpieza, pase lo que pase."
+                    t!(
+                        "Quedan fuera de cualquier limpieza, pase lo que pase.",
+                        "These are left out of every cleanup, no matter what."
+                    )
                 },
                 "excluded",
                 &excluded,
@@ -305,7 +395,7 @@ impl Shell {
                 cx,
                 |config, path| config.excluded_paths.retain(|item| item != path),
             ))
-            .child(row().child(Btn::secondary("Excluir una ruta…").size(BtnSize::Sm).icon(Icon::Plus).build(
+            .child(row().child(Btn::secondary(t!("Excluir una ruta…", "Exclude a path…")).size(BtnSize::Sm).icon(Icon::Plus).build(
                 "add-excluded",
                 cx.listener(|this, _, _, cx| {
                     this.pick_paths(cx, |config, paths| {
@@ -329,7 +419,7 @@ impl Shell {
             files: false,
             directories: true,
             multiple: true,
-            prompt: Some("Añadir".into()),
+            prompt: Some(t!("Añadir", "Add").into()),
         });
         cx.spawn(async move |this, cx| {
             if let Ok(Ok(Some(paths))) = receiver.await {
@@ -345,13 +435,20 @@ impl Shell {
     fn render_history(&self) -> impl IntoElement {
         let now = std::time::SystemTime::now();
         let entries = self.settings.history.data.as_deref().unwrap_or(&[]);
-        section("Historial de limpieza").child(if entries.is_empty() {
+        section(t!("Historial de limpieza", "Cleanup history")).child(if entries.is_empty() {
             div()
                 .fs(font::CAPTION)
                 .text_color(theme::text_2())
                 .child(match &self.settings.history.error {
-                    Some(error) => format!("No hemos podido leer el historial: {error}"),
-                    None => "Todavía no has limpiado nada. Aquí quedará constancia de todo lo que hagas.".to_string(),
+                    Some(error) => tf!(
+                        "No hemos podido leer el historial: {error}",
+                        "We couldn't read the history: {error}"
+                    ),
+                    None => t!(
+                        "Todavía no has limpiado nada. Aquí quedará constancia de todo lo que hagas.",
+                        "You haven't cleaned anything yet. Everything you do will be recorded here."
+                    )
+                    .to_string(),
                 })
                 .into_any_element()
         } else {
@@ -363,9 +460,10 @@ impl Shell {
                     div()
                         .fs(font::CAPTION)
                         .text_color(theme::text_2())
-                        .child(format!(
+                        .child(tf!(
                             "{}: {} liberados y {} enviados a la Papelera.",
-                            plural(entries.len(), "acción", "acciones"),
+                            "{}: {} freed and {} moved to the Trash.",
+                            plural(entries.len(), t!("acción", "action"), t!("acciones", "actions")),
                             human_size(freed),
                             human_size(trashed)
                         )),
@@ -373,10 +471,10 @@ impl Shell {
                 .child(
                     col().children(entries.iter().take(60).enumerate().map(|(index, entry)| {
                         let (label, color) = match entry.outcome.status {
-                            CleanStatus::Done | CleanStatus::WouldClean => ("Hecho", theme::green()),
-                            CleanStatus::Partial => ("A medias", theme::amber()),
-                            CleanStatus::Skipped => ("Omitido", theme::text_3()),
-                            CleanStatus::Failed => ("Falló", theme::rose()),
+                            CleanStatus::Done | CleanStatus::WouldClean => (t!("Hecho", "Done"), theme::green()),
+                            CleanStatus::Partial => (t!("A medias", "Partial"), theme::amber()),
+                            CleanStatus::Skipped => (t!("Omitido", "Skipped"), theme::text_3()),
+                            CleanStatus::Failed => (t!("Falló", "Failed"), theme::rose()),
                         };
                         let bytes = entry.outcome.freed_bytes + entry.outcome.trashed_bytes;
                         row()

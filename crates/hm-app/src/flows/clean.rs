@@ -9,14 +9,15 @@ use futures::StreamExt;
 use gpui::Context;
 use hm_core::audit::AuditLog;
 use hm_core::{
-    Action, Area, CancelToken, CleanEvent, CleanOptions, CleanOutcome, CleanReport, CleanStatus,
-    Cleaner, Finding, Recovery, Risk,
+    t, tf, Action, Area, CancelToken, CleanEvent, CleanOptions, CleanOutcome, CleanReport,
+    CleanStatus, Cleaner, Finding, Recovery, Risk,
 };
 use hm_dev::types::ListeningPort;
 use hm_system::types::AppInfo;
 
 use crate::logic::selection::{is_actionable, stays_inside, Summary};
 use crate::state::{ScrollPane, Shell};
+use crate::ui::motion;
 
 // Only one sheet exists at a time, inside an `Option`, so boxing would gain nothing.
 #[allow(clippy::large_enum_variant)]
@@ -53,8 +54,21 @@ pub struct CleaningSheet {
     pub index: usize,
     pub current: String,
     pub bytes_done: u64,
+    /// What `bytes_done` was before the last item finished, so the number can glide to the new one.
+    pub bytes_before: u64,
+    /// What the selection adds up to, for "of N".
+    pub expected: u64,
+    /// Finished items, oldest first, for the running list.
+    pub done: Vec<DoneItem>,
     pub cancel: CancelToken,
     pub cancelling: bool,
+}
+
+/// One finished item in the cleaning sheet's running list.
+pub struct DoneItem {
+    pub title: String,
+    pub status: CleanStatus,
+    pub bytes: u64,
 }
 
 pub struct ResultSheet {
@@ -104,7 +118,13 @@ impl Shell {
         // What deserves a look goes first, however long the list.
         items.sort_by(|a, b| b.risk.cmp(&a.risk).then(b.size.cmp(&a.size)));
         if items.is_empty() {
-            self.show_toast("No hay nada que limpiar en lo que has elegido.", cx);
+            self.show_toast(
+                t!(
+                    "No hay nada que limpiar en lo que has elegido.",
+                    "There's nothing to clean in what you chose."
+                ),
+                cx,
+            );
             return;
         }
         let summary = Summary::of(&items);
@@ -116,7 +136,7 @@ impl Shell {
             .collect();
         self.toast_serial += 1;
         let serial = self.toast_serial;
-        self.sheet = Some(Sheet::Review(ReviewSheet {
+        self.open_sheet(Sheet::Review(ReviewSheet {
             title: title.into(),
             confirm_label: confirm_label.into(),
             items,
@@ -163,24 +183,32 @@ impl Shell {
             .filter(|finding| self.selection.is_selected(finding))
             .cloned()
             .collect();
-        self.open_review("Revisa antes de limpiar", "Limpiar", items, cx);
+        self.open_review(
+            t!("Revisa antes de limpiar", "Review before cleaning"),
+            t!("Limpiar", "Clean"),
+            items,
+            cx,
+        );
     }
 
     pub fn review_uninstall(&mut self, app: AppInfo, cx: &mut Context<Self>) {
         if app.is_system || app.uninstall_blocked.is_some() {
-            let reason = app
-                .uninstall_blocked
-                .clone()
-                .unwrap_or_else(|| "Las apps del sistema no se pueden desinstalar.".to_string());
+            let reason = app.uninstall_blocked.clone().unwrap_or_else(|| {
+                t!(
+                    "Las apps del sistema no se pueden desinstalar.",
+                    "System apps can't be uninstalled."
+                )
+                .to_string()
+            });
             self.show_toast(reason, cx);
             return;
         }
         let include_leftovers = true;
         let finding = self.uninstall_finding(&app, include_leftovers);
-        let title = format!("Desinstalar {}", app.name);
+        let title = tf!("Desinstalar {}", "Uninstall {}", app.name);
         self.open_review_with(
             title,
-            "Desinstalar",
+            t!("Desinstalar", "Uninstall"),
             vec![finding],
             Some(UninstallOptions {
                 app,
@@ -230,8 +258,46 @@ impl Shell {
         if matches!(self.sheet, Some(Sheet::Cleaning(_))) {
             return;
         }
-        self.sheet = None;
+        self.dismiss_sheet(cx);
+    }
+
+    /// Shows `sheet`. Replacing an open one swaps its content in place; opening from nothing plays
+    /// the full entrance.
+    pub fn open_sheet(&mut self, sheet: Sheet) {
+        if self.sheet.is_none() || self.sheet_closing {
+            self.sheet_opened += 1;
+        }
+        self.sheet_closing = false;
+        self.sheet = Some(sheet);
+    }
+
+    /// Plays the sheet out, then removes it.
+    pub fn dismiss_sheet(&mut self, cx: &mut Context<Self>) {
+        if self.sheet.is_none() || self.sheet_closing {
+            return;
+        }
+        if motion::reduced() {
+            self.sheet = None;
+            cx.notify();
+            return;
+        }
+        self.sheet_closing = true;
+        let opened = self.sheet_opened;
         cx.notify();
+        cx.spawn(async move |this, cx| {
+            cx.background_executor()
+                .timer(Duration::from_millis(motion::pace::LEAVE + 20))
+                .await;
+            this.update(cx, |shell, cx| {
+                if shell.sheet_closing && shell.sheet_opened == opened {
+                    shell.sheet = None;
+                    shell.sheet_closing = false;
+                    cx.notify();
+                }
+            })
+            .ok();
+        })
+        .detach();
     }
 
     /// Runs what the review sheet lists. Refuses if a required acknowledgement is missing.
@@ -258,18 +324,23 @@ impl Shell {
                 freed_bytes: 0,
                 trashed_bytes: 0,
                 freed_is_estimate: false,
-                message: Some("Queda fuera de la home de prueba".to_string()),
+                message: Some(
+                    t!("Queda fuera de la home de prueba", "Outside the test home").to_string(),
+                ),
                 errors: Vec::new(),
             })
             .collect();
 
         let cancel = CancelToken::new();
-        self.sheet = Some(Sheet::Cleaning(CleaningSheet {
+        self.open_sheet(Sheet::Cleaning(CleaningSheet {
             titles: titles.clone(),
             total: attempted,
             index: 0,
             current: items.first().map(|f| f.title.clone()).unwrap_or_default(),
             bytes_done: 0,
+            bytes_before: 0,
+            expected: items.iter().map(|f| f.size).fold(0, u64::saturating_add),
+            done: Vec::new(),
             cancel: cancel.clone(),
             cancelling: false,
         }));
@@ -372,7 +443,19 @@ impl Shell {
                 }
             }
             CleanEvent::Finished(outcome) => {
-                sheet.bytes_done += outcome.freed_bytes + outcome.trashed_bytes;
+                let bytes = outcome.freed_bytes + outcome.trashed_bytes;
+                sheet.bytes_before = sheet.bytes_done;
+                sheet.bytes_done += bytes;
+                let title = sheet
+                    .titles
+                    .get(&outcome.finding_id)
+                    .cloned()
+                    .unwrap_or_else(|| outcome.finding_id.clone());
+                sheet.done.push(DoneItem {
+                    title,
+                    status: outcome.status,
+                    bytes,
+                });
             }
         }
     }
@@ -413,7 +496,7 @@ impl Shell {
         let was_cancelling =
             matches!(&self.sheet, Some(Sheet::Cleaning(sheet)) if sheet.cancelling);
         let cancelled = was_cancelling || report.outcomes.len() < attempted;
-        self.sheet = Some(Sheet::Result(ResultSheet {
+        self.open_sheet(Sheet::Result(ResultSheet {
             report,
             titles,
             attempted,
@@ -451,27 +534,35 @@ impl Shell {
                     "ui.empty_trash",
                     Area::System,
                     "trash",
-                    "Vaciar la Papelera",
+                    t!("Vaciar la Papelera", "Empty Trash"),
                 )
-                .subtitle("Todo lo que hay ahora en la Papelera")
-                .explanation(
+                .subtitle(t!(
+                    "Todo lo que hay ahora en la Papelera",
+                    "Everything in the Trash right now"
+                ))
+                .explanation(t!(
                     "Borra para siempre todo lo que hay en la Papelera, también lo que no pusiste \
                          ahí con HealthyMac. Es el paso que libera el espacio de verdad.",
-                )
+                    "Permanently deletes everything in the Trash, including what you didn't put \
+                         there with HealthyMac. This is the step that actually frees the space."
+                ))
                 .size(bytes)
                 .risk(Risk::Review)
                 .recovery(Recovery::None)
                 .action(Action::EmptyTrash);
                 shell.open_review(
-                    "Vaciar la Papelera",
-                    "Vaciar la Papelera",
+                    t!("Vaciar la Papelera", "Empty Trash"),
+                    t!("Vaciar la Papelera", "Empty Trash"),
                     vec![finding],
                     cx,
                 );
                 if let Some(Sheet::Review(review)) = &mut shell.sheet {
                     review.acknowledgement = Some(
-                        "Entiendo que vaciar la Papelera es definitivo: lo que hay dentro no se puede recuperar."
-                            .to_string(),
+                        t!(
+                            "Entiendo que vaciar la Papelera es definitivo: lo que hay dentro no se puede recuperar.",
+                            "I understand that emptying the Trash is permanent: what's inside can't be recovered."
+                        )
+                        .to_string(),
                     );
                 }
             },
@@ -481,7 +572,7 @@ impl Shell {
     // ---- Terminate a process, from the Ports page ------------------------------------------------
 
     pub fn open_terminate(&mut self, port: ListeningPort, cx: &mut Context<Self>) {
-        self.sheet = Some(Sheet::Terminate(TerminateSheet {
+        self.open_sheet(Sheet::Terminate(TerminateSheet {
             port,
             force: false,
             error: None,
@@ -505,9 +596,12 @@ impl Shell {
         let force = sheet.force;
         let name = sheet.port.process_name.clone();
         if !self.mode.may_signal_processes() {
-            self.sheet = None;
+            self.dismiss_sheet(cx);
             self.show_toast(
-                format!("Simulación: no se ha enviado ninguna señal a {name}."),
+                tf!(
+                    "Simulación: no se ha enviado ninguna señal a {name}.",
+                    "Simulation: no signal was sent to {name}."
+                ),
                 cx,
             );
             return;
@@ -518,8 +612,14 @@ impl Shell {
             move || hm_dev::ports::terminate(pid, force),
             move |shell, result, cx| match result {
                 Ok(()) => {
-                    shell.sheet = None;
-                    shell.show_toast(format!("{name} ha recibido la señal."), cx);
+                    shell.dismiss_sheet(cx);
+                    shell.show_toast(
+                        tf!(
+                            "{name} ha recibido la señal.",
+                            "{name} received the signal."
+                        ),
+                        cx,
+                    );
                     shell.load_ports(cx);
                 }
                 Err(error) => {
@@ -561,14 +661,15 @@ fn simulate_clean(
             message: None,
             errors: Vec::new(),
         };
-        if finding.title == "Desinstalar Final Cut Pro" {
+        // By id, not title: the title is in whichever language the demo was built in.
+        if finding.id == "apps.uninstall:Final Cut Pro" {
             outcome.status = CleanStatus::Failed;
             outcome
                 .errors
                 .push("/Applications/Final Cut Pro.app: Operation not permitted".to_string());
         } else if finding.blocked_by.iter().any(|process| process == "Xcode") {
             outcome.status = CleanStatus::Skipped;
-            outcome.message = Some("Xcode está abierto".to_string());
+            outcome.message = Some(t!("Xcode está abierto", "Xcode is open").to_string());
         } else {
             match finding.action {
                 Action::Command { .. } | Action::CloneDedupe { .. } | Action::EmptyTrash => {

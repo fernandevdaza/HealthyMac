@@ -2,7 +2,7 @@
 
 use anyhow::Result;
 use hm_core::fmt::human_age;
-use hm_core::{Action, Area, Finding, ScanContext, Scanner, SizeInfo};
+use hm_core::{t, tf, Action, Area, Finding, ScanContext, Scanner, SizeInfo};
 
 use super::full_disk_access_notice;
 use crate::sweep::{shared_sweep, SweptArtifact, SweptProject};
@@ -18,11 +18,14 @@ impl Scanner for ArtifactScanner {
     }
 
     fn name(&self) -> &'static str {
-        "Artefactos de proyectos"
+        t!("Artefactos de proyectos", "Project build artifacts")
     }
 
     fn description(&self) -> &'static str {
-        "Dependencias y compilados de tus proyectos. Se preseleccionan solo los de proyectos inactivos."
+        t!(
+            "Dependencias y compilados de tus proyectos. Se preseleccionan solo los de proyectos inactivos.",
+            "Dependencies and build output of your projects. Only those of idle projects are preselected."
+        )
     }
 
     fn area(&self) -> Area {
@@ -40,7 +43,10 @@ impl Scanner for ArtifactScanner {
             findings.push(full_disk_access_notice(
                 ID,
                 "permisos",
-                "Tu carpeta personal es una de las raíces de proyectos, pero Documentos, Escritorio y Descargas no se revisaron porque hacerlo pediría permisos en mitad del escaneo. Concede Acceso total al disco para incluirlas, o añade solo las carpetas que quieras como raíces.",
+                t!(
+                    "Tu carpeta personal es una de las raíces de proyectos, pero Documentos, Escritorio y Descargas no se revisaron porque hacerlo pediría permisos en mitad del escaneo. Concede Acceso total al disco para incluirlas, o añade solo las carpetas que quieras como raíces.",
+                    "Your home folder is one of the project roots, but Documents, Desktop and Downloads were not checked, because that would ask for permission in the middle of the scan. Grant Full Disk Access to include them, or add only the folders you want as roots."
+                ),
             ));
         }
         Ok(util::finalize(ctx, findings))
@@ -51,14 +57,21 @@ impl Scanner for ArtifactScanner {
 fn activity_sentence(ctx: &ScanContext, project: &SweptProject, idle: bool) -> String {
     match (project.last_activity(), project.idle_days(ctx.now)) {
         (_, Some(days)) if idle => {
-            format!("El proyecto lleva {days} días sin actividad.")
+            tf!(
+                "El proyecto lleva {days} días sin actividad.",
+                "The project has had no activity for {days} days."
+            )
         }
-        (Some(last), Some(_)) => format!(
+        (Some(last), Some(_)) => tf!(
             "El proyecto tuvo actividad {}, así que no va preseleccionado.",
+            "The project was last active {}, so it is not preselected.",
             human_age(last, ctx.now)
         ),
-        _ => "No se pudo saber cuándo tuvo actividad el proyecto, así que no va preseleccionado."
-            .to_string(),
+        _ => t!(
+            "No se pudo saber cuándo tuvo actividad el proyecto, así que no va preseleccionado.",
+            "HealthyMac couldn't tell when the project was last active, so it is not preselected."
+        )
+        .to_string(),
     }
 }
 
@@ -71,9 +84,15 @@ fn mostly_shared(info: &SizeInfo) -> bool {
 
 fn shared_note(artifact: &SweptArtifact) -> &'static str {
     if mostly_shared(&artifact.info) {
-        " Casi todo está compartido con otra carpeta, como el almacén global de su gestor de paquetes, y seguiría en disco: limpiarlo apenas liberaría espacio, así que no va preseleccionado."
+        t!(
+            " Casi todo está compartido con otra carpeta, como el almacén global de su gestor de paquetes, y seguiría en disco: limpiarlo apenas liberaría espacio, así que no va preseleccionado.",
+            " Almost all of it is shared with another folder, such as its package manager's global store, and would stay on disk: cleaning it would free almost nothing, so it is not preselected."
+        )
     } else if artifact.info.shared > 0 {
-        " Parte de su tamaño está compartido con otra carpeta y seguiría en disco."
+        t!(
+            " Parte de su tamaño está compartido con otra carpeta y seguiría en disco.",
+            " Part of its size is shared with another folder and would stay on disk."
+        )
     } else {
         ""
     }
@@ -94,8 +113,11 @@ fn project_findings(ctx: &ScanContext, project: &SweptProject) -> Vec<Finding> {
         }
         let rule = artifact.rule;
         let recover = match artifact.hint {
-            Some(command) => format!("Se recupera con «{command}»."),
-            None => rule.recover.to_string(),
+            Some(command) => tf!(
+                "Se recupera con «{command}».",
+                "It comes back with “{command}”."
+            ),
+            None => rule.recover.get().to_string(),
         };
         findings.push(
             Finding::new(
@@ -107,7 +129,7 @@ fn project_findings(ctx: &ScanContext, project: &SweptProject) -> Vec<Finding> {
             .group(project.display.clone())
             .explanation(format!(
                 "{} {recover}{} {activity}",
-                rule.what,
+                rule.what.get(),
                 shared_note(artifact)
             ))
             .measured(&artifact.info)
@@ -139,7 +161,11 @@ fn project_findings(ctx: &ScanContext, project: &SweptProject) -> Vec<Finding> {
             format!(
                 "{} ({})",
                 first.label,
-                util::count(paths.len() as u64, "carpeta", "carpetas")
+                util::count(
+                    paths.len() as u64,
+                    t!("carpeta", "folder"),
+                    t!("carpetas", "folders")
+                )
             )
         };
         findings.push(
@@ -151,7 +177,11 @@ fn project_findings(ctx: &ScanContext, project: &SweptProject) -> Vec<Finding> {
             )
             .group(project.display.clone())
             .subtitle(project.path.display().to_string())
-            .explanation(format!("{} {} {activity}", rule.what, rule.recover))
+            .explanation(format!(
+                "{} {} {activity}",
+                rule.what.get(),
+                rule.recover.get()
+            ))
             .size(bytes)
             .shared_bytes(shared)
             .items(files)

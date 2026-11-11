@@ -1,29 +1,40 @@
 //! System errors, in words a person would use.
 
-/// Replaces the raw OS wording at the end of an error with plain Spanish, leaving the rest of the
-/// message (usually which file it was) intact.
+use hm_core::t;
+
+/// Replaces the raw OS wording at the end of an error with plain words in the current language,
+/// leaving the rest of the message (usually which file it was) intact.
 pub fn friendly_error(error: &str) -> String {
-    const WORDINGS: [(&str, &str); 5] = [
-        ("No such file or directory (os error 2)", "ya no existe"),
+    let wordings: [(&str, &str); 5] = [
+        (
+            "No such file or directory (os error 2)",
+            t!("ya no existe", "no longer exists"),
+        ),
         (
             "Permission denied (os error 13)",
-            "macOS no nos deja leerlo",
+            t!("macOS no nos deja leerlo", "macOS won't let us read it"),
         ),
         (
             "Operation not permitted (os error 1)",
-            "macOS no lo permite: puede que falte el Acceso total al disco",
+            t!(
+                "macOS no lo permite: puede que falte el Acceso total al disco",
+                "macOS doesn't allow it: Full Disk Access may be missing"
+            ),
         ),
         (
             "No space left on device (os error 28)",
-            "no queda espacio en el disco",
+            t!("no queda espacio en el disco", "the disk is out of space"),
         ),
         (
             "Device not configured (os error 6)",
-            "el disco ya no está conectado",
+            t!(
+                "el disco ya no está conectado",
+                "the disk is no longer connected"
+            ),
         ),
     ];
     let mut out = error.to_string();
-    for (raw, plain) in WORDINGS {
+    for (raw, plain) in wordings {
         out = out.replace(raw, plain);
     }
     out

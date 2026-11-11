@@ -13,6 +13,7 @@ use std::io::{BufReader, Read, Seek};
 use std::path::Path;
 
 use anyhow::{bail, Context, Result};
+use hm_core::{t, tf};
 
 const MAGIC: &[u8; 4] = b"GGUF";
 const MAX_KEY_BYTES: u64 = 64 * 1024;
@@ -66,7 +67,8 @@ pub struct GgufInfo {
 /// Parses only the header, so it is cheap even for files of tens of gigabytes. Returns an error for
 /// anything that isn't a complete, sane GGUF v2 or v3 header.
 pub fn read_info(path: &Path) -> Result<GgufInfo> {
-    let file = File::open(path).with_context(|| format!("no se pudo abrir {}", path.display()))?;
+    let file = File::open(path)
+        .with_context(|| tf!("no se pudo abrir {}", "couldn't open {}", path.display()))?;
     let len = file.metadata()?.len();
     let mut info = parse(file, len)?;
     if info.quantization.is_none() {
@@ -144,12 +146,18 @@ struct Reader<R> {
 
 impl<R: Read + Seek> Reader<R> {
     fn advance(&mut self, count: u64) -> Result<()> {
-        let end = self.pos.checked_add(count).context("longitud desbordada")?;
+        let end = self
+            .pos
+            .checked_add(count)
+            .context(t!("longitud desbordada", "length overflow"))?;
         if end > self.len {
-            bail!("cabecera GGUF truncada");
+            bail!(t!("cabecera GGUF truncada", "truncated GGUF header"));
         }
         if end > MAX_HEADER_BYTES {
-            bail!("cabecera GGUF demasiado grande");
+            bail!(t!(
+                "cabecera GGUF demasiado grande",
+                "GGUF header too large"
+            ));
         }
         self.pos = end;
         Ok(())
@@ -204,14 +212,20 @@ impl<R: Read + Seek> Reader<R> {
             TYPE_STRING => self.skip_string(),
             TYPE_ARRAY => {
                 if depth >= MAX_ARRAY_DEPTH {
-                    bail!("arrays anidados en la cabecera GGUF");
+                    bail!(t!(
+                        "arrays anidados en la cabecera GGUF",
+                        "nested arrays in the GGUF header"
+                    ));
                 }
                 let element = self.u32()?;
                 let count = self.u64()?;
                 self.skip_array(element, count)
             }
             other => {
-                let size = scalar_size(other).context("tipo de valor GGUF desconocido")?;
+                let size = scalar_size(other).context(t!(
+                    "tipo de valor GGUF desconocido",
+                    "unknown GGUF value type"
+                ))?;
                 self.skip(size)
             }
         }
@@ -219,24 +233,33 @@ impl<R: Read + Seek> Reader<R> {
 
     fn skip_array(&mut self, element: u32, count: u64) -> Result<()> {
         if element == TYPE_ARRAY {
-            bail!("arrays anidados en la cabecera GGUF");
+            bail!(t!(
+                "arrays anidados en la cabecera GGUF",
+                "nested arrays in the GGUF header"
+            ));
         }
         if element == TYPE_STRING {
             if count
                 .checked_mul(8)
                 .is_none_or(|min| min > self.remaining())
             {
-                bail!("array de cadenas mayor que el archivo");
+                bail!(t!(
+                    "array de cadenas mayor que el archivo",
+                    "string array larger than the file"
+                ));
             }
             for _ in 0..count {
                 self.skip_string()?;
             }
             return Ok(());
         }
-        let size = scalar_size(element).context("tipo de array GGUF desconocido")?;
+        let size = scalar_size(element).context(t!(
+            "tipo de array GGUF desconocido",
+            "unknown GGUF array type"
+        ))?;
         let total = count
             .checked_mul(size)
-            .context("longitud de array desbordada")?;
+            .context(t!("longitud de array desbordada", "array length overflow"))?;
         self.skip(total)
     }
 
@@ -274,17 +297,22 @@ impl<R: Read + Seek> Reader<R> {
             self.skip_string()?;
             let dims = self.u32()?;
             if dims > MAX_TENSOR_DIMS {
-                bail!("tensor con demasiadas dimensiones");
+                bail!(t!(
+                    "tensor con demasiadas dimensiones",
+                    "tensor with too many dimensions"
+                ));
             }
             let mut elements: u64 = 1;
             for _ in 0..dims {
-                elements = elements
-                    .checked_mul(self.u64()?)
-                    .context("dimensiones de tensor desbordadas")?;
+                elements = elements.checked_mul(self.u64()?).context(t!(
+                    "dimensiones de tensor desbordadas",
+                    "tensor dimensions overflow"
+                ))?;
             }
-            total = total
-                .checked_add(elements)
-                .context("recuento de parámetros desbordado")?;
+            total = total.checked_add(elements).context(t!(
+                "recuento de parámetros desbordado",
+                "parameter count overflow"
+            ))?;
             self.skip(4 + 8)?; // Type and data offset.
         }
         Ok(total)
@@ -310,12 +338,15 @@ fn parse<R: Read + Seek>(source: R, len: u64) -> Result<GgufInfo> {
 
     let magic: [u8; 4] = reader.bytes()?;
     if &magic != MAGIC {
-        bail!("no es un archivo GGUF");
+        bail!(t!("no es un archivo GGUF", "not a GGUF file"));
     }
     // A big-endian file reads as a huge version and is refused here, as is v1 with its 32-bit counts.
     let version = reader.u32()?;
     if version != 2 && version != 3 {
-        bail!("versión de GGUF no admitida: {version}");
+        bail!(tf!(
+            "versión de GGUF no admitida: {version}",
+            "unsupported GGUF version: {version}"
+        ));
     }
     let tensor_count = reader.u64()?;
     let kv_count = reader.u64()?;
@@ -323,7 +354,10 @@ fn parse<R: Read + Seek>(source: R, len: u64) -> Result<GgufInfo> {
         .checked_mul(MIN_KV_BYTES)
         .and_then(|kv| tensor_count.checked_mul(MIN_TENSOR_BYTES)?.checked_add(kv));
     if declared.is_none_or(|bytes| bytes > reader.remaining()) {
-        bail!("la cabecera GGUF declara más entradas de las que caben en el archivo");
+        bail!(t!(
+            "la cabecera GGUF declara más entradas de las que caben en el archivo",
+            "the GGUF header declares more entries than the file can hold"
+        ));
     }
 
     let mut info = GgufInfo {
@@ -339,7 +373,7 @@ fn parse<R: Read + Seek>(source: R, len: u64) -> Result<GgufInfo> {
     for _ in 0..kv_count {
         let key = reader
             .string(MAX_KEY_BYTES)?
-            .context("clave GGUF demasiado larga")?;
+            .context(t!("clave GGUF demasiado larga", "GGUF key too long"))?;
         let kind = reader.u32()?;
         match key.as_str() {
             "general.architecture" => info.architecture = reader.text(kind)?,

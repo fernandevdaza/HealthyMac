@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use anyhow::{Context, Result};
-use hm_core::{fsutil, CancelToken};
+use hm_core::{fsutil, tf, CancelToken};
 use rayon::prelude::*;
 
 use crate::gate;
@@ -60,7 +60,7 @@ fn run(
     cancel: &CancelToken,
 ) -> Result<DirNode> {
     let meta = fs::symlink_metadata(root)
-        .with_context(|| format!("no se pudo leer {}", root.display()))?;
+        .with_context(|| tf!("no se pudo leer {}", "could not read {}", root.display()))?;
     let mut devices = vec![meta.dev()];
     // `/` is the sealed system volume, and almost everything a user thinks of as "the disk" is on
     // the data volume, reached through firmlinks. Without this the map of `/` would be nearly empty.

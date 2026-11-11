@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use gpui::{div, prelude::*, px, AnyElement, Context, ElementId, FontWeight, Window};
 use hm_core::fmt::{human_age, human_size};
+use hm_core::{t, tf};
 use hm_system::types::DirNode;
 
 use super::disk_map::treemap_canvas;
@@ -29,7 +30,7 @@ impl Shell {
         let mut actions: Vec<AnyElement> = Vec::new();
         if self.disk.loading {
             actions.push(
-                Btn::secondary("Cancelar")
+                Btn::secondary(t!("Cancelar", "Cancel"))
                     .icon(Icon::Stop)
                     .build(
                         "disk-cancel",
@@ -39,7 +40,7 @@ impl Shell {
             );
         } else {
             actions.push(
-                Btn::ghost("Elegir carpeta…")
+                Btn::ghost(t!("Elegir carpeta…", "Choose folder…"))
                     .icon(Icon::Folder)
                     .disabled(self.mode.demo)
                     .build(
@@ -49,7 +50,7 @@ impl Shell {
                     .into_any_element(),
             );
             actions.push(
-                Btn::secondary("Volver a medir")
+                Btn::secondary(t!("Volver a medir", "Measure again"))
                     .icon(Icon::Refresh)
                     .build(
                         "disk-rescan",
@@ -59,8 +60,11 @@ impl Shell {
             );
         }
         let header = page_header(
-            "Mapa de disco",
-            "Cada rectángulo ocupa lo que ocupa de verdad. Haz clic para entrar en una carpeta.",
+            t!("Mapa de disco", "Disk Map"),
+            t!(
+                "Cada rectángulo ocupa lo que ocupa de verdad. Haz clic para entrar en una carpeta.",
+                "Every rectangle is drawn to scale. Click a folder to go into it."
+            ),
             actions,
         );
 
@@ -68,7 +72,7 @@ impl Shell {
             if self.disk.loading {
                 self.render_disk_loading().into_any_element()
             } else if let Some(error) = self.disk.error.clone() {
-                let retry = Btn::secondary("Reintentar")
+                let retry = Btn::secondary(t!("Reintentar", "Try again"))
                     .size(BtnSize::Sm)
                     .build(
                         "disk-retry",
@@ -79,7 +83,10 @@ impl Shell {
                     .px(px(GUTTER))
                     .child(notice(
                         NoticeKind::Error,
-                        "No hemos podido medir esa carpeta",
+                        t!(
+                            "No hemos podido medir esa carpeta",
+                            "Couldn't measure that folder"
+                        ),
                         Some(error.into()),
                         Some(retry),
                     ))
@@ -88,10 +95,13 @@ impl Shell {
                 crate::ui::chrome::empty_state(
                     Icon::Treemap,
                     theme::text_2(),
-                    "Has cancelado la medición",
-                    "Vuelve a medir cuando quieras, o elige una carpeta concreta para ir más rápido.",
+                    t!("Has cancelado la medición", "Measuring cancelled"),
+                    t!(
+                        "Vuelve a medir cuando quieras, o elige una carpeta concreta para ir más rápido.",
+                        "Measure again whenever you like, or choose a specific folder to go faster."
+                    ),
                     Some(
-                        Btn::primary("Medir de nuevo", theme::brand_stops())
+                        Btn::primary(t!("Medir de nuevo", "Measure again"))
                             .icon(Icon::Treemap)
                             .build("disk-start", cx.listener(|this, _, _, cx| this.load_disk(cx)))
                             .into_any_element(),
@@ -129,25 +139,27 @@ impl Shell {
                     .child(
                         row()
                             .gap(sp(2.))
-                            .child(spinner("disk-spin", 14.0, theme::teal()))
+                            .child(spinner("disk-spin", 14.0, theme::text_2()))
                             .child(
                                 div()
                                     .fs(font::SUBHEAD)
                                     .font_weight(FontWeight::SEMIBOLD)
-                                    .child("Midiendo tu disco"),
+                                    .child(t!("Midiendo tu disco", "Measuring your disk")),
                             ),
                     )
-                    .child(indeterminate_bar(
-                        "disk-progress",
-                        theme::brand_stops(),
-                        6.0,
-                    ))
+                    .child(indeterminate_bar("disk-progress", theme::primary(), 6.0))
                     .child(path_label(path, font::CAPTION, theme::text_2()))
                     .child(div().fs(font::CAPTION).text_color(theme::text_3()).child(
                         if elapsed > 8 {
-                            "Una carpeta grande tarda lo suyo. Solo lee: no cambia nada."
+                            t!(
+                                "Una carpeta grande tarda lo suyo. Solo lee: no cambia nada.",
+                                "A big folder takes a while. Read only: nothing is changed."
+                            )
                         } else {
-                            "Solo lee: no cambia nada."
+                            t!(
+                                "Solo lee: no cambia nada.",
+                                "Read only: nothing is changed."
+                            )
                         },
                     )),
             )
@@ -158,7 +170,7 @@ impl Shell {
             files: false,
             directories: true,
             multiple: false,
-            prompt: Some("Medir esta carpeta".into()),
+            prompt: Some(t!("Medir esta carpeta", "Measure this folder").into()),
         });
         cx.spawn(async move |this, cx| {
             if let Ok(Ok(Some(mut paths))) = receiver.await {
@@ -264,7 +276,7 @@ impl Shell {
                     .child(breadcrumb)
                     .when(can_go_up, |this| {
                         this.child(
-                            Btn::ghost("Subir")
+                            Btn::ghost(t!("Subir", "Up"))
                                 .size(BtnSize::Sm)
                                 .icon(Icon::ArrowUp)
                                 .build(
@@ -278,7 +290,7 @@ impl Shell {
                         )
                     })
                     .when(!self.mode.demo, |this| {
-                        this.child(Btn::ghost("Mostrar en Finder").size(BtnSize::Sm).build(
+                        this.child(Btn::ghost(t!("Mostrar en Finder", "Show in Finder")).size(BtnSize::Sm).build(
                             "disk-reveal",
                             cx.listener(move |_, _, _, cx| cx.reveal_path(&current_path)),
                         ))
@@ -287,10 +299,16 @@ impl Shell {
             .when(partial, |this| {
                 this.child(notice(
                     NoticeKind::Info,
-                    "Algunas carpetas no se han podido leer, así que el total es un mínimo",
+                    t!(
+                        "Algunas carpetas no se han podido leer, así que el total es un mínimo",
+                        "Some folders couldn't be read, so the total is a minimum"
+                    ),
                     Some(
-                        "Con Acceso total al disco el mapa ve todo. Puedes darlo en Ajustes."
-                            .into(),
+                        t!(
+                            "Con Acceso total al disco el mapa ve todo. Puedes darlo en Ajustes.",
+                            "With Full Disk Access the map sees everything. You can grant it in Settings."
+                        )
+                        .into(),
                     ),
                     None,
                 ))
@@ -312,6 +330,13 @@ impl Shell {
             node.size as f64 / current.size as f64 * 100.0
         } else {
             0.0
+        };
+        let share = tf!("{share:.1} %", "{share:.1}%");
+        // Spanish writes decimals with a comma.
+        let share = if hm_core::i18n::is_english() {
+            share
+        } else {
+            share.replace('.', ",")
         };
         row()
             .flex_none()
@@ -338,13 +363,16 @@ impl Shell {
                     .flex_none()
                     .gap(sp(4.))
                     .when(node.file_count > 0, |this| {
-                        this.child(stat("Archivos", super::fmt_count(node.file_count)))
+                        this.child(stat(
+                            t!("Archivos", "Files"),
+                            super::fmt_count(node.file_count),
+                        ))
                     })
                     .when_some(node.last_modified, |this, when| {
-                        this.child(stat("Cambiado", human_age(when, now)))
+                        this.child(stat(t!("Cambiado", "Modified"), human_age(when, now)))
                     })
-                    .child(stat("Del total", format!("{share:.1} %").replace('.', ",")))
-                    .child(stat("Tamaño", human_size(node.size))),
+                    .child(stat(t!("Del total", "Of total"), share))
+                    .child(stat(t!("Tamaño", "Size"), human_size(node.size))),
             )
     }
 }
@@ -458,9 +486,13 @@ impl Shell {
                             }
                         }
                     }
-                    Err(error) => {
-                        shell.show_toast(format!("No se pudo medir esa carpeta: {error}"), cx)
-                    }
+                    Err(error) => shell.show_toast(
+                        tf!(
+                            "No se pudo medir esa carpeta: {error}",
+                            "Couldn't measure that folder: {error}"
+                        ),
+                        cx,
+                    ),
                 }
             },
         );

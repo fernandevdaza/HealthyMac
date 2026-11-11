@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use hm_ai::types::*;
-use hm_core::{Area, Finding, Recovery, Risk};
+use hm_core::{t, tf, Area, Finding, Recovery, Risk};
 
 use super::{days_ago, hours_ago, GB, GIB, HOME, MB};
 
@@ -372,10 +372,13 @@ pub fn removal_finding(model: &LocalModel) -> Finding {
         "ai.model_removal",
         Area::LocalAi,
         &model.id,
-        format!("Eliminar {}", model.name),
+        tf!("Eliminar {}", "Remove {}", model.name),
     )
     .subtitle(model.root.display().to_string())
-    .explanation("Se mueve a la Papelera. Puedes volver a descargarlo.")
+    .explanation(t!(
+        "Se mueve a la Papelera. Puedes volver a descargarlo.",
+        "It goes to the Trash. You can download it again."
+    ))
     .size(model.size)
     .items(model.files.len() as u64)
     .risk(if model.loaded {

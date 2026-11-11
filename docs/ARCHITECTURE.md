@@ -38,7 +38,11 @@ quien usa IA local. UI en GPUI.
    error fatal.
 7. **El PATH de una app lanzada desde Finder es mínimo.** Las herramientas se localizan con
    `ctx.which("brew")`, no asumiendo el PATH.
-8. **Textos de interfaz en español.** Identificadores y comentarios en inglés.
+8. **Textos de interfaz en español e inglés.** Cada texto se escribe en español y, al lado, en
+   inglés: `t!("Papelera", "Trash")` da un `&'static str` y `tf!("{n} elementos", "{n} items")`
+   formatea. Vale también para los escáneres, porque sus títulos y explicaciones los ve el usuario.
+   Los tests corren en español, que es el idioma por defecto. Identificadores y comentarios en
+   inglés.
 
 ## Modelo
 

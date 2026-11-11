@@ -5,107 +5,48 @@
 <meta charset="utf-8">
 <style>
   * { box-sizing: border-box; margin: 0; }
-  :root { --teal: #5eead4; --violet: #a5a6f0; --ink: #f4f7fb; --dim: #8b97a8; }
-  html, body { width: 1280px; height: 480px; overflow: hidden; background: #05080d; }
+  /* The app's light tokens (docs/DESIGN.md): neutral greys, colour only for state. */
+  :root { --bg: #f2f2f4; --text-1: #111113; --text-2: #5c5c61; --hairline: rgba(0, 0, 0, .09); }
+  html, body { width: 1280px; height: 480px; overflow: hidden; background: var(--bg); }
   body {
-    position: relative; color: var(--ink);
-    font-family: -apple-system, "SF Pro Display", "Helvetica Neue", sans-serif;
-    background-image:
-      radial-gradient(760px 300px at 100% 112%, rgba(56, 120, 190, .42), transparent 70%),
-      radial-gradient(420px 260px at 0% 0%, rgba(94, 234, 212, .07), transparent 70%),
-      radial-gradient(rgba(255, 255, 255, .055) 1px, transparent 1px);
-    background-size: auto, auto, 18px 18px;
+    position: relative; color: var(--text-1);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
+    -webkit-font-smoothing: antialiased;
   }
-  .left { position: absolute; left: 62px; top: 112px; }
-  .logo { display: flex; align-items: center; gap: 16px; }
-  .logo img { width: 96px; height: 96px; margin: -8px -4px -8px -10px; }
-  .logo h1 { font-size: 72px; font-weight: 800; letter-spacing: -2.6px; line-height: 1; }
-  .logo span { color: var(--teal); }
-  .tag { margin-top: 28px; font-size: 27px; font-weight: 600; letter-spacing: -.4px; }
-  .tag em {
-    color: var(--teal); font-family: "New York", "Iowan Old Style", Georgia, serif;
-    font-style: italic; font-weight: 500; font-size: 29px;
+  .left { position: absolute; left: 72px; top: 0; bottom: 0; width: 430px;
+          display: flex; flex-direction: column; justify-content: center; }
+  .logo { display: flex; align-items: center; gap: 12px; }
+  .logo img { width: 64px; height: 64px; margin: -6px -2px -6px -8px; }
+  .logo b { font-size: 26px; font-weight: 600; letter-spacing: -.4px; }
+  h1 { margin-top: 34px; font-size: 56px; line-height: 60px; font-weight: 700; letter-spacing: -1.6px; }
+  p { margin-top: 20px; font-size: 20px; line-height: 29px; color: var(--text-2); letter-spacing: -.1px;
+      text-wrap: balance; }
+  .shot {
+    position: absolute; left: 548px; top: 50%; transform: translateY(-50%); width: 672px;
+    border-radius: 10px; overflow: hidden; background: #fff;
+    box-shadow: 0 0 0 1px var(--hairline), 0 18px 44px rgba(0, 0, 0, .12), 0 2px 6px rgba(0, 0, 0, .06);
   }
-  .mono {
-    margin-top: 24px; color: var(--dim); font: 500 13.5px/25px "SF Mono", Menlo, monospace;
-    letter-spacing: 3px;
-  }
-  .grid {
-    position: absolute; left: 636px; top: 122px;
-    display: grid; grid-template-columns: repeat(2, 114px); gap: 22px 18px;
-  }
-  .card {
-    height: 106px; border-radius: 14px; background: rgba(13, 21, 30, .9);
-    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
-    border: 1px solid rgba(94, 234, 212, .42);
-    box-shadow: 0 0 18px rgba(94, 234, 212, .08), inset 0 0 22px rgba(94, 234, 212, .03);
-  }
-  .card.v {
-    border-color: rgba(165, 166, 240, .46);
-    box-shadow: 0 0 18px rgba(165, 166, 240, .08), inset 0 0 22px rgba(165, 166, 240, .03);
-  }
-  .card i {
-    font-family: "New York", "Iowan Old Style", Georgia, serif; font-size: 23px; color: var(--teal);
-    letter-spacing: -.3px;
-  }
-  .card.v i { color: var(--violet); }
-  .card b { font-size: 12px; font-weight: 600; }
-  .panel {
-    position: absolute; left: 898px; top: 100px; width: 322px; height: 280px; padding: 20px 22px;
-    border-radius: 18px; background: rgba(8, 13, 20, .94); border: 1px solid rgba(255, 255, 255, .24);
-    box-shadow: 0 0 34px rgba(94, 234, 212, .06);
-    font-family: "SF Mono", Menlo, monospace;
-  }
-  .panel h2 { font-size: 13.5px; font-weight: 500; color: var(--dim); }
-  .row { margin-top: 18px; }
-  .row label { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--ink); }
-  .row label b { font-weight: 600; }
-  .bar { margin-top: 8px; height: 22px; border-radius: 6px; background: rgba(255, 255, 255, .05); overflow: hidden; }
-  .bar div { height: 100%; }
-  .full { width: 100%; background: repeating-linear-gradient(135deg, #39465a 0 6px, #2c3748 6px 12px); }
-  .real { width: 4.7%; background: var(--teal); box-shadow: 0 0 12px var(--teal); }
-  .teal { color: var(--teal); }
-  .note {
-    margin-top: 22px; padding-top: 16px; border-top: 1px solid rgba(255, 255, 255, .09);
-    font-size: 11.5px; line-height: 18px; color: var(--dim);
-  }
+  .shot img { display: block; width: 100%; }
 </style>
 </head>
 <body>
   <div class="left">
     <div class="logo">
-      <img src="../crates/hm-app/assets/AppIcon.png" alt="">
-      <h1>Healthy<span>Mac</span></h1>
+      <img src="../crates/hm-app/assets/AppIcon-light.png" alt="">
+      <b>HealthyMac</b>
     </div>
-    <p class="tag" data-en="Clean your Mac, <em>honestly.</em>" data-es="Limpia tu Mac, <em>sin engaños.</em>"></p>
-    <p class="mono" data-en="DEVELOPER · LOCAL AI · SYSTEM<br>DISK MAP · MONITOR · WRITTEN IN RUST"
-       data-es="DEVELOPER · IA LOCAL · SISTEMA<br>MAPA DE DISCO · MONITOR · HECHO EN RUST"></p>
+    <h1 data-en="Clean your Mac,<br>honestly." data-es="Limpia tu Mac,<br>sin engaños."></h1>
+    <p data-en="See what is really eating your disk and get it back safely."
+       data-es="Mira qué se está comiendo tu disco de verdad y recupéralo con seguridad."></p>
   </div>
 
-  <div class="grid">
-    <div class="card"><i>target/</i><b data-en="Build artifacts" data-es="Artefactos"></b></div>
-    <div class="card v"><i>.gguf</i><b data-en="AI models" data-es="Modelos de IA"></b></div>
-    <div class="card v"><i>docker</i><b data-en="Containers" data-es="Contenedores"></b></div>
-    <div class="card"><i>~/Library</i><b data-en="Caches and logs" data-es="Cachés y registros"></b></div>
-  </div>
-
-  <div class="panel">
-    <h2>.venv · <span data-en="what you get back" data-es="lo que recuperas"></span></h2>
-    <div class="row">
-      <label><span data-en="Occupies" data-es="Ocupa"></span><b>961 MB</b></label>
-      <div class="bar"><div class="full"></div></div>
-    </div>
-    <div class="row">
-      <label><span class="teal" data-en="Really freed" data-es="Se libera de verdad"></span><b class="teal">45 MB</b></label>
-      <div class="bar"><div class="real"></div></div>
-    </div>
-    <p class="note" data-en="The rest is cloned from uv's store.<br>APFS keeps it either way."
-       data-es="El resto son clones del almacén de uv.<br>APFS lo conserva de todas formas."></p>
-  </div>
+  <div class="shot"><img alt=""></div>
 
   <script>
     const lang = new URLSearchParams(location.search).get("lang") === "es" ? "es" : "en";
+    document.documentElement.lang = lang;
     for (const el of document.querySelectorAll("[data-en]")) el.innerHTML = el.dataset[lang];
+    document.querySelector(".shot img").src = `screenshots/overview-${lang}-light.jpg`;
   </script>
 </body>
 </html>

@@ -18,7 +18,7 @@
 use std::path::Path;
 
 use hm_core::fmt::human_size;
-use hm_core::{Action, Finding, Risk};
+use hm_core::{t, tf, Action, Finding, Risk};
 
 use crate::types::*;
 
@@ -61,10 +61,10 @@ pub fn reclaimable_bytes(findings: &[Finding]) -> u64 {
 
 fn label_for(score: u8) -> &'static str {
     match score {
-        90.. => "Excelente",
-        75..=89 => "Buena",
-        50..=74 => "Regular",
-        _ => "Atención",
+        90.. => t!("Excelente", "Excellent"),
+        75..=89 => t!("Buena", "Good"),
+        50..=74 => t!("Regular", "Fair"),
+        _ => t!("Atención", "Needs attention"),
     }
 }
 
@@ -93,12 +93,15 @@ fn boot_disk(disks: &[DiskStats]) -> Option<&DiskStats> {
 /// The percentage matters on a small disk and the absolute figure on a large one: 10 % of 8 TB is
 /// plenty, so each threshold is capped, with a floor below which macOS itself starts to struggle.
 fn disk_factor(disks: &[DiskStats]) -> HealthFactor {
-    const TITLE: &str = "Espacio en disco";
+    let title = t!("Espacio en disco", "Disk space");
     let Some(disk) = boot_disk(disks).filter(|disk| disk.total > 0) else {
         return factor(
-            TITLE,
-            "No se pudo leer el disco de arranque, así que no cuenta para la puntuación."
-                .to_string(),
+            title,
+            t!(
+                "No se pudo leer el disco de arranque, así que no cuenta para la puntuación.",
+                "The startup disk could not be read, so it does not count toward the score."
+            )
+            .to_string(),
             Severity::Info,
             0,
         );
@@ -107,61 +110,81 @@ fn disk_factor(disks: &[DiskStats]) -> HealthFactor {
         |percent: u64, cap: u64, floor: u64| (disk.total / 100 * percent).min(cap).max(floor);
     let free = disk.available;
     let percent = free.saturating_mul(100) / disk.total;
-    let status = format!(
+    let status = tf!(
         "Quedan {} libres de {} ({percent} %).",
+        "{} free of {} ({percent}%).",
         human_size(free),
         human_size(disk.total)
     );
     if free < threshold(5, 25 * GB, 5 * GB) {
         factor(
-            TITLE,
-            format!("{status} Con tan poco espacio, macOS no puede actualizarse ni usar bien la memoria virtual."),
+            title,
+            tf!(
+                "{status} Con tan poco espacio, macOS no puede actualizarse ni usar bien la memoria virtual.",
+                "{status} With so little space, macOS cannot update or make good use of virtual memory."
+            ),
             Severity::Critical,
             35,
         )
     } else if free < threshold(10, 50 * GB, 10 * GB) {
         factor(
-            TITLE,
-            format!(
-                "{status} Conviene liberar espacio pronto: el sistema empezará a ir más lento."
+            title,
+            tf!(
+                "{status} Conviene liberar espacio pronto: el sistema empezará a ir más lento.",
+                "{status} Free up space soon: the system will start to slow down."
             ),
             Severity::Warning,
             20,
         )
     } else if free < threshold(20, 100 * GB, 20 * GB) {
         factor(
-            TITLE,
-            format!("{status} Todavía hay margen, pero se está acabando."),
+            title,
+            tf!(
+                "{status} Todavía hay margen, pero se está acabando.",
+                "{status} There is still room, but it is running out."
+            ),
             Severity::Info,
             6,
         )
     } else {
-        factor(TITLE, status, Severity::Good, 0)
+        factor(title, status, Severity::Good, 0)
     }
 }
 
 fn pressure_factor(pressure: MemoryPressure) -> HealthFactor {
-    const TITLE: &str = "Presión de memoria";
+    let title = t!("Presión de memoria", "Memory pressure");
     match pressure {
         MemoryPressure::Normal => factor(
-            TITLE,
-            "Normal: hay memoria de sobra para lo que tienes abierto.".to_string(),
+            title,
+            t!(
+                "Normal: hay memoria de sobra para lo que tienes abierto.",
+                "Normal: there is plenty of memory for what you have open."
+            )
+            .to_string(),
             Severity::Good,
             0,
         ),
         MemoryPressure::Warning => factor(
-            TITLE,
-            "Alta: macOS está comprimiendo memoria para hacer sitio. Cerrar apps que no uses lo \
-             aliviaría."
-                .to_string(),
+            title,
+            t!(
+                "Alta: macOS está comprimiendo memoria para hacer sitio. Cerrar apps que no uses lo \
+                 aliviaría.",
+                "High: macOS is compressing memory to make room. Quitting apps you are not using \
+                 would help."
+            )
+            .to_string(),
             Severity::Warning,
             10,
         ),
         MemoryPressure::Critical => factor(
-            TITLE,
-            "Crítica: no hay suficiente memoria para lo que tienes abierto y todo irá lento. Cierra \
-             apps cuanto antes."
-                .to_string(),
+            title,
+            t!(
+                "Crítica: no hay suficiente memoria para lo que tienes abierto y todo irá lento. Cierra \
+                 apps cuanto antes.",
+                "Critical: there is not enough memory for what you have open, and everything will \
+                 be slow. Quit apps as soon as you can."
+            )
+            .to_string(),
             Severity::Critical,
             20,
         ),
@@ -170,7 +193,7 @@ fn pressure_factor(pressure: MemoryPressure) -> HealthFactor {
 
 /// Some swap is normal on macOS, so only a lot of it, relative to RAM, costs anything real.
 fn swap_factor(memory: &MemoryStats) -> HealthFactor {
-    const TITLE: &str = "Memoria de intercambio";
+    let title = t!("Memoria de intercambio", "Swap memory");
     let used = human_size(memory.swap_used);
     let percent = memory
         .swap_used
@@ -179,32 +202,48 @@ fn swap_factor(memory: &MemoryStats) -> HealthFactor {
         .unwrap_or(0);
     match percent {
         0..=9 => factor(
-            TITLE,
-            format!("{used} en uso, lo normal en macOS."),
+            title,
+            tf!(
+                "{used} en uso, lo normal en macOS.",
+                "{used} in use, which is normal on macOS."
+            ),
             Severity::Good,
             0,
         ),
         10..=24 => factor(
-            TITLE,
-            format!("{used} en uso. No es un problema, aunque el sistema ya está tirando de disco."),
+            title,
+            tf!(
+                "{used} en uso. No es un problema, aunque el sistema ya está tirando de disco.",
+                "{used} in use. Not a problem, though the system is already leaning on the disk."
+            ),
             Severity::Info,
             1,
         ),
         25..=49 => factor(
-            TITLE,
-            format!("{used} en uso, una parte importante de tu memoria. Puede notarse al cambiar de app."),
+            title,
+            tf!(
+                "{used} en uso, una parte importante de tu memoria. Puede notarse al cambiar de app.",
+                "{used} in use, a large share of your memory. You may notice it when switching apps."
+            ),
             Severity::Info,
             3,
         ),
         50..=99 => factor(
-            TITLE,
-            format!("{used} en uso. El sistema depende bastante del disco, lo que lo hace más lento."),
+            title,
+            tf!(
+                "{used} en uso. El sistema depende bastante del disco, lo que lo hace más lento.",
+                "{used} in use. The system relies heavily on the disk, which slows it down."
+            ),
             Severity::Warning,
             6,
         ),
         _ => factor(
-            TITLE,
-            format!("{used} en uso, más que toda tu memoria. Reiniciar o cerrar apps se notará mucho."),
+            title,
+            tf!(
+                "{used} en uso, más que toda tu memoria. Reiniciar o cerrar apps se notará mucho.",
+                "{used} in use, more than all of your memory. Restarting or quitting apps will \
+                 make a big difference."
+            ),
             Severity::Warning,
             10,
         ),
@@ -212,37 +251,53 @@ fn swap_factor(memory: &MemoryStats) -> HealthFactor {
 }
 
 fn thermal_factor(state: ThermalState) -> HealthFactor {
-    const TITLE: &str = "Temperatura";
+    let title = t!("Temperatura", "Temperature");
     match state {
         ThermalState::Unknown => factor(
-            TITLE,
-            "macOS no ha dado su estado térmico, así que no cuenta para la puntuación.".to_string(),
+            title,
+            t!(
+                "macOS no ha dado su estado térmico, así que no cuenta para la puntuación.",
+                "macOS has not reported its thermal state, so it does not count toward the score."
+            )
+            .to_string(),
             Severity::Info,
             0,
         ),
         ThermalState::Nominal => factor(
-            TITLE,
-            "Normal, sin limitación.".to_string(),
+            title,
+            t!("Normal, sin limitación.", "Normal, not throttled.").to_string(),
             Severity::Good,
             0,
         ),
         ThermalState::Fair => factor(
-            TITLE,
-            "Algo elevada, pero sin que afecte al rendimiento todavía.".to_string(),
+            title,
+            t!(
+                "Algo elevada, pero sin que afecte al rendimiento todavía.",
+                "Somewhat high, but not affecting performance yet."
+            )
+            .to_string(),
             Severity::Info,
             2,
         ),
         ThermalState::Serious => factor(
-            TITLE,
-            "Alta: macOS está reduciendo el rendimiento para enfriarse.".to_string(),
+            title,
+            t!(
+                "Alta: macOS está reduciendo el rendimiento para enfriarse.",
+                "High: macOS is reducing performance to cool down."
+            )
+            .to_string(),
             Severity::Warning,
             8,
         ),
         ThermalState::Critical => factor(
-            TITLE,
-            "Muy alta: el rendimiento está muy limitado. Deja que el Mac descanse y revisa qué lo \
-             está forzando."
-                .to_string(),
+            title,
+            t!(
+                "Muy alta: el rendimiento está muy limitado. Deja que el Mac descanse y revisa qué lo \
+                 está forzando.",
+                "Very high: performance is heavily limited. Let the Mac rest and check what is \
+                 pushing it so hard."
+            )
+            .to_string(),
             Severity::Critical,
             15,
         ),
@@ -250,43 +305,60 @@ fn thermal_factor(state: ThermalState) -> HealthFactor {
 }
 
 fn battery_factor(battery: &BatteryStats) -> HealthFactor {
-    const TITLE: &str = "Batería";
+    let title = t!("Batería", "Battery");
     let cycles = battery
         .cycle_count
-        .map(|cycles| format!(" {cycles} ciclos."))
+        .map(|cycles| tf!(" {cycles} ciclos.", " {cycles} cycles."))
         .unwrap_or_default();
     let capacity = battery
         .health_percent
-        .map(|health| format!("Capacidad máxima del {health} %."))
-        .unwrap_or_else(|| "Capacidad máxima desconocida.".to_string());
+        .map(|health| {
+            tf!(
+                "Capacidad máxima del {health} %.",
+                "Maximum capacity {health}%."
+            )
+        })
+        .unwrap_or_else(|| {
+            t!("Capacidad máxima desconocida.", "Maximum capacity unknown.").to_string()
+        });
     let verdict = battery.condition.as_deref().unwrap_or("Normal");
     if !verdict.eq_ignore_ascii_case("normal") && !verdict.eq_ignore_ascii_case("good") {
         return factor(
-            TITLE,
-            format!("macOS indica «{verdict}». {capacity}{cycles} Conviene llevarla a revisar."),
+            title,
+            tf!(
+                "macOS indica «{verdict}». {capacity}{cycles} Conviene llevarla a revisar.",
+                "macOS reports “{verdict}”. {capacity}{cycles} Consider having it checked."
+            ),
             Severity::Critical,
             10,
         );
     }
     match battery.health_percent {
         Some(health) if health < 70 => factor(
-            TITLE,
-            format!("{capacity}{cycles} Se notará en la autonomía, y quizá sea hora de cambiarla."),
+            title,
+            tf!(
+                "{capacity}{cycles} Se notará en la autonomía, y quizá sea hora de cambiarla.",
+                "{capacity}{cycles} You will notice it in battery life, and it may be time to \
+                 replace it."
+            ),
             Severity::Warning,
             7,
         ),
         Some(health) if health < 80 => factor(
-            TITLE,
-            format!("{capacity}{cycles} Ya aguanta bastante menos que nueva."),
+            title,
+            tf!(
+                "{capacity}{cycles} Ya aguanta bastante menos que nueva.",
+                "{capacity}{cycles} It already lasts quite a bit less than when it was new."
+            ),
             Severity::Warning,
             4,
         ),
-        _ => factor(TITLE, format!("{capacity}{cycles}"), Severity::Good, 0),
+        _ => factor(title, format!("{capacity}{cycles}"), Severity::Good, 0),
     }
 }
 
 fn reclaimable_factor(bytes: u64) -> HealthFactor {
-    const TITLE: &str = "Espacio recuperable";
+    let title = t!("Espacio recuperable", "Reclaimable space");
     let size = human_size(bytes);
     let (severity, penalty) = match bytes {
         b if b < 2 * GB => (Severity::Good, 0),
@@ -296,11 +368,17 @@ fn reclaimable_factor(bytes: u64) -> HealthFactor {
         _ => (Severity::Info, 6),
     };
     let detail = if penalty == 0 {
-        format!("Solo {size} de cachés y archivos que se pueden regenerar.")
+        tf!(
+            "Solo {size} de cachés y archivos que se pueden regenerar.",
+            "Only {size} of caches and files that can be regenerated."
+        )
     } else {
-        format!("{size} de cachés y archivos que se pueden regenerar. Limpiarlos no pierde nada importante.")
+        tf!(
+            "{size} de cachés y archivos que se pueden regenerar. Limpiarlos no pierde nada importante.",
+            "{size} of caches and files that can be regenerated. Cleaning them loses nothing important."
+        )
     };
-    factor(TITLE, detail, severity, penalty)
+    factor(title, detail, severity, penalty)
 }
 
 #[cfg(test)]

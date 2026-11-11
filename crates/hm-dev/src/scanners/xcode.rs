@@ -5,7 +5,7 @@ use std::time::{Duration, SystemTime};
 
 use anyhow::Result;
 use hm_core::fmt::{age_days, human_size};
-use hm_core::{fsutil, Action, Area, Finding, Recovery, Risk, ScanContext, Scanner};
+use hm_core::{fsutil, t, tf, Action, Area, Finding, Recovery, Risk, ScanContext, Scanner};
 use plist::Value;
 use rayon::prelude::*;
 
@@ -37,60 +37,76 @@ const DEVICE_SUPPORT_PLATFORMS: &[(&str, &str)] = &[
     ("visionOS", "visionOS DeviceSupport"),
 ];
 
-pub(super) const SPECS: &[CacheSpec] = &[
-    CacheSpec {
-        key: "coresimulator_caches",
-        group: "Simuladores",
-        title: "Cachés de CoreSimulator",
-        paths: &["Library/Developer/CoreSimulator/Caches"],
-        removal: Removal::Contents,
-        risk: Risk::Safe,
-        recovery: Recovery::Automatic,
-        selected: true,
-        blocked_by: XCODE_AND_SIMULATOR,
-        explanation: "Cachés que los simuladores generan al arrancar. Se regeneran solas: el próximo arranque de un simulador tardará algo más. Tus apps y datos en los simuladores no están aquí.",
-    },
-    CacheSpec {
-        key: "coresimulator_logs",
-        group: "Simuladores",
-        title: "Registros de CoreSimulator",
-        paths: &["Library/Logs/CoreSimulator"],
-        removal: Removal::Contents,
-        risk: Risk::Safe,
-        recovery: Recovery::Automatic,
-        selected: true,
-        blocked_by: XCODE_AND_SIMULATOR,
-        explanation: "Registros de los simuladores. Solo sirven para investigar errores pasados.",
-    },
-    CacheSpec {
-        key: "xcode_cache",
-        group: "Xcode",
-        title: "Caché de Xcode",
-        paths: &["Library/Caches/com.apple.dt.Xcode"],
-        removal: Removal::Contents,
-        risk: Risk::Safe,
-        recovery: Recovery::Automatic,
-        selected: true,
-        blocked_by: XCODE,
-        explanation: "Caché interna de la app Xcode. La regenera sola.",
-    },
-    CacheSpec {
-        key: "swiftui_previews",
-        group: "Xcode",
-        title: "Datos de las vistas previas de SwiftUI",
-        paths: &["Library/Developer/Xcode/UserData/Previews"],
-        removal: Removal::Command {
-            program: "xcrun",
-            args: &["simctl", "--set", "previews", "delete", "all"],
-            fallback: Fallback::TrashContents,
+/// Built on every scan rather than kept in a `const`, so its text follows the current language.
+pub(super) fn specs() -> Vec<CacheSpec> {
+    let simulators = t!("Simuladores", "Simulators");
+    vec![
+        CacheSpec {
+            key: "coresimulator_caches",
+            group: simulators,
+            title: t!("Cachés de CoreSimulator", "CoreSimulator caches"),
+            paths: &["Library/Developer/CoreSimulator/Caches"],
+            removal: Removal::Contents,
+            risk: Risk::Safe,
+            recovery: Recovery::Automatic,
+            selected: true,
+            blocked_by: XCODE_AND_SIMULATOR,
+            explanation: t!(
+                "Cachés que los simuladores generan al arrancar. Se regeneran solas: el próximo arranque de un simulador tardará algo más. Tus apps y datos en los simuladores no están aquí.",
+                "Caches the simulators build when they start. They regenerate on their own: the next simulator launch takes a little longer. Your apps and data in the simulators are not here."
+            ),
         },
-        risk: Risk::Safe,
-        recovery: Recovery::Automatic,
-        selected: true,
-        blocked_by: XCODE_AND_SIMULATOR,
-        explanation: "Simuladores que Xcode crea solo para las vistas previas de SwiftUI. Xcode los vuelve a crear cuando hacen falta, aunque la primera vista previa tardará más.",
-    },
-];
+        CacheSpec {
+            key: "coresimulator_logs",
+            group: simulators,
+            title: t!("Registros de CoreSimulator", "CoreSimulator logs"),
+            paths: &["Library/Logs/CoreSimulator"],
+            removal: Removal::Contents,
+            risk: Risk::Safe,
+            recovery: Recovery::Automatic,
+            selected: true,
+            blocked_by: XCODE_AND_SIMULATOR,
+            explanation: t!(
+                "Registros de los simuladores. Solo sirven para investigar errores pasados.",
+                "Simulator logs. They are only useful for looking into past errors."
+            ),
+        },
+        CacheSpec {
+            key: "xcode_cache",
+            group: "Xcode",
+            title: t!("Caché de Xcode", "Xcode cache"),
+            paths: &["Library/Caches/com.apple.dt.Xcode"],
+            removal: Removal::Contents,
+            risk: Risk::Safe,
+            recovery: Recovery::Automatic,
+            selected: true,
+            blocked_by: XCODE,
+            explanation: t!(
+                "Caché interna de la app Xcode. La regenera sola.",
+                "The Xcode app's internal cache. It regenerates on its own."
+            ),
+        },
+        CacheSpec {
+            key: "swiftui_previews",
+            group: "Xcode",
+            title: t!("Datos de las vistas previas de SwiftUI", "SwiftUI preview data"),
+            paths: &["Library/Developer/Xcode/UserData/Previews"],
+            removal: Removal::Command {
+                program: "xcrun",
+                args: &["simctl", "--set", "previews", "delete", "all"],
+                fallback: Fallback::TrashContents,
+            },
+            risk: Risk::Safe,
+            recovery: Recovery::Automatic,
+            selected: true,
+            blocked_by: XCODE_AND_SIMULATOR,
+            explanation: t!(
+                "Simuladores que Xcode crea solo para las vistas previas de SwiftUI. Xcode los vuelve a crear cuando hacen falta, aunque la primera vista previa tardará más.",
+                "Simulators Xcode creates just for SwiftUI previews. Xcode creates them again when needed, though the first preview takes longer."
+            ),
+        },
+    ]
+}
 
 pub(super) struct XcodeScanner;
 
@@ -100,11 +116,14 @@ impl Scanner for XcodeScanner {
     }
 
     fn name(&self) -> &'static str {
-        "Xcode y simuladores"
+        t!("Xcode y simuladores", "Xcode and simulators")
     }
 
     fn description(&self) -> &'static str {
-        "DerivedData, Archives, soporte de dispositivos y simuladores que ya no se pueden usar."
+        t!(
+            "DerivedData, Archives, soporte de dispositivos y simuladores que ya no se pueden usar.",
+            "DerivedData, Archives, device support and simulators that can no longer be used."
+        )
     }
 
     fn area(&self) -> Area {
@@ -118,7 +137,7 @@ impl Scanner for XcodeScanner {
 }
 
 fn findings(ctx: &ScanContext, has_tool: HasTool) -> Vec<Finding> {
-    let mut all = table_findings(ctx, ID, SPECS, has_tool);
+    let mut all = table_findings(ctx, ID, &specs(), has_tool);
     all.extend(derived_data(ctx));
     all.extend(archives(ctx));
     all.extend(device_support(ctx));
@@ -167,11 +186,15 @@ fn derived_data(ctx: &ScanContext) -> Vec<Finding> {
 
     let info = fsutil::measure_many(&shared, &ctx.cancel);
     if info.files > 0 {
+        let title = t!("Cachés compartidas de módulos", "Shared module caches");
         found.push(
-            Finding::new(ID, Area::Developer, "derived_data_shared", "Cachés compartidas de módulos")
+            Finding::new(ID, Area::Developer, "derived_data_shared", title)
                 .group("DerivedData")
                 .subtitle(root.display().to_string())
-                .explanation("Módulos precompilados de Swift y Clang que usan todos tus proyectos. Se regeneran solos: la próxima compilación de cada proyecto tardará algo más.")
+                .explanation(t!(
+                    "Módulos precompilados de Swift y Clang que usan todos tus proyectos. Se regeneran solos: la próxima compilación de cada proyecto tardará algo más.",
+                    "Precompiled Swift and Clang modules that all your projects use. They regenerate on their own: each project's next build takes a little longer."
+                ))
                 .measured(&info)
                 .risk(Risk::Safe)
                 .recovery(Recovery::Automatic)
@@ -216,7 +239,7 @@ fn derived_data_project(ctx: &ScanContext, path: &Path) -> Option<Finding> {
     let shown = workspace
         .as_deref()
         .map(|workspace| util::tilde(ctx, workspace))
-        .unwrap_or_else(|| "un proyecto desconocido".to_string());
+        .unwrap_or_else(|| t!("un proyecto desconocido", "an unknown project").to_string());
     let finding = Finding::new(ID, Area::Developer, format!("derived_data:{folder}"), name)
         .group("DerivedData")
         .trash(path)
@@ -230,31 +253,38 @@ fn derived_data_project(ctx: &ScanContext, path: &Path) -> Option<Finding> {
             .risk(Risk::Safe)
             .selected(true)
             .tag("huerfano")
-            .explanation(format!(
-                "Compilados de {shown}, que ya no existe en esa ubicación. Si lo moviste, Xcode los regenerará al compilarlo de nuevo."
+            .explanation(tf!(
+                "Compilados de {shown}, que ya no existe en esa ubicación. Si lo moviste, Xcode los regenerará al compilarlo de nuevo.",
+                "Build output of {shown}, which no longer exists at that location. If you moved it, Xcode will regenerate it when you build the project again."
             )),
         Some(PathState::Unknown) => finding
             .risk(Risk::Moderate)
             .selected(false)
-            .explanation(format!(
-                "Compilados de {shown}. No se comprobó si el proyecto sigue ahí porque hacerlo pediría permisos. Xcode los regenera al compilar, lo que lleva su tiempo."
+            .explanation(tf!(
+                "Compilados de {shown}. No se comprobó si el proyecto sigue ahí porque hacerlo pediría permisos. Xcode los regenera al compilar, lo que lleva su tiempo.",
+                "Build output of {shown}. HealthyMac didn't check whether the project is still there, because checking would ask for permission. Xcode regenerates it when you build, which takes time."
             )),
         Some(PathState::Exists) => finding
             .risk(Risk::Moderate)
             .selected(idle)
             .tag(if idle { "inactivo" } else { "activo" })
             .explanation(match idle_for {
-                Some(days) if idle => format!(
-                    "Compilados de {shown}, sin usar desde hace {days} días. Xcode los regenera al compilar, lo que lleva su tiempo."
+                Some(days) if idle => tf!(
+                    "Compilados de {shown}, sin usar desde hace {days} días. Xcode los regenera al compilar, lo que lleva su tiempo.",
+                    "Build output of {shown}, unused for {days} days. Xcode regenerates it when you build, which takes time."
                 ),
-                _ => format!(
-                    "Compilados de {shown}, usados hace poco, así que no van preseleccionados. Xcode los regenera al compilar, lo que lleva su tiempo."
+                _ => tf!(
+                    "Compilados de {shown}, usados hace poco, así que no van preseleccionados. Xcode los regenera al compilar, lo que lleva su tiempo.",
+                    "Build output of {shown}, used recently, so it is not preselected. Xcode regenerates it when you build, which takes time."
                 ),
             }),
         None => finding
             .risk(Risk::Moderate)
             .selected(false)
-            .explanation("Compilados de un proyecto que no se pudo identificar. Xcode los regenera al compilar, lo que lleva su tiempo."),
+            .explanation(t!(
+                "Compilados de un proyecto que no se pudo identificar. Xcode los regenera al compilar, lo que lleva su tiempo.",
+                "Build output of a project that could not be identified. Xcode regenerates it when you build, which takes time."
+            )),
     })
 }
 
@@ -302,7 +332,10 @@ fn archives(ctx: &ScanContext) -> Vec<Finding> {
                     .recovery(Recovery::None)
                     .selected(false)
                     .blocked_by(XCODE)
-                    .explanation("Una versión que compilaste para distribuirla, con sus dSYM. Sin ellos no podrás simbolizar los informes de fallos de esa versión, y no se pueden regenerar sin el código exacto de entonces."),
+                    .explanation(t!(
+                        "Una versión que compilaste para distribuirla, con sus dSYM. Sin ellos no podrás simbolizar los informes de fallos de esa versión, y no se pueden regenerar sin el código exacto de entonces.",
+                        "A build you made for distribution, with its dSYMs. Without them you can't symbolicate crash reports from that version, and they can't be regenerated without the exact code from back then."
+                    )),
             )
         })
         .collect()
@@ -367,7 +400,7 @@ fn device_support_platform(ctx: &ScanContext, platform: &str, root: &Path) -> Ve
                 format!("device_support:{platform}:{folder}"),
                 format!("{platform} {folder}"),
             )
-            .group("Soporte de dispositivos")
+            .group(t!("Soporte de dispositivos", "Device support"))
             .trash(path)
             .measured(&info)
             .risk(Risk::Safe)
@@ -375,13 +408,15 @@ fn device_support_platform(ctx: &ScanContext, platform: &str, root: &Path) -> Ve
             .selected(old)
             .blocked_by(XCODE);
             Some(if old {
-                finding.tag("antiguo").explanation(
+                finding.tag("antiguo").explanation(t!(
                     "Símbolos de depuración de una versión del sistema antigua. Si vuelves a conectar un dispositivo con esa versión, Xcode los copia de nuevo, lo que tarda unos minutos.",
-                )
+                    "Debug symbols for an old OS version. If you connect a device with that version again, Xcode copies them back, which takes a few minutes."
+                ))
             } else {
-                finding.explanation(
+                finding.explanation(t!(
                     "Símbolos de depuración de una versión del sistema reciente, así que no van preseleccionados. Si los quitas, Xcode los copia de nuevo la próxima vez que conectes ese dispositivo, lo que tarda unos minutos.",
-                )
+                    "Debug symbols for a recent OS version, so they are not preselected. If you remove them, Xcode copies them back the next time you connect that device, which takes a few minutes."
+                ))
             })
         })
         .collect()
@@ -487,12 +522,18 @@ fn unavailable_finding(
             ID,
             Area::Developer,
             "simulators_unavailable",
-            format!(
+            // The English puts "unavailable" before the noun, so it goes into the counted word.
+            tf!(
                 "{} no disponibles",
-                util::count(folders.len() as u64, "simulador", "simuladores")
+                "{}",
+                util::count(
+                    folders.len() as u64,
+                    t!("simulador", "unavailable simulator"),
+                    t!("simuladores", "unavailable simulators")
+                )
             ),
         )
-        .group("Simuladores")
+        .group(t!("Simuladores", "Simulators"))
         .subtitle(devices_root.display().to_string())
         .size(info.exclusive())
         .shared_bytes(info.shared)
@@ -509,8 +550,9 @@ fn unavailable_finding(
                 .collect(),
         })
         .tag("no_disponible")
-        .explanation(format!(
+        .explanation(tf!(
             "Simuladores cuyo sistema ya no está instalado, así que no pueden arrancar: {shown}. Ocupan {} con sus apps y datos, que se pierden al eliminarlos. Solo volverían a funcionar si reinstalas ese sistema en Xcode.",
+            "Simulators whose OS is no longer installed, so they can't start: {shown}. They take up {} with their apps and data, which are lost when they are deleted. They would only work again if you reinstalled that OS in Xcode.",
             human_size(info.bytes)
         )),
     )

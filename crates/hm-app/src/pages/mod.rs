@@ -18,17 +18,23 @@ mod sheets;
 mod sidebar;
 mod startup;
 
-use std::time::Duration;
-
 use gpui::{
-    div, ease_in_out, prelude::*, px, Animation, AnimationExt, AnyElement, Context, Div, ElementId,
+    div, ease_in_out, prelude::*, px, AnimationExt, AnyElement, Context, Div, ElementId,
     FontWeight, KeyDownEvent, MouseButton, Render, Stateful, Window,
 };
 
 use crate::state::{Page, ScrollPane, Shell};
 use crate::theme::{self, font, radius, sp};
+use crate::ui::motion;
 use crate::ui::scrollbar::{scrollbar, ScrollSource};
 use crate::ui::{f, TextExt};
+
+/// How long a toast stays up. `show_toast` removes it after the same time.
+pub const TOAST_MS: u64 = 4_000;
+
+/// Opens the Full Disk Access list in System Settings.
+pub const FULL_DISK_ACCESS_URL: &str =
+    "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles";
 
 impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -56,15 +62,14 @@ impl Render for Shell {
             .on_action(|_: &crate::CloseWindow, window, _| window.remove_window())
             .child(self.render_sidebar(cx))
             .child(
+                // The page sits flush against the sidebar, as in Finder or System Settings, rather
+                // than floating as a card: this is a Mac app, not a web dashboard.
                 div()
                     .relative()
                     .flex_1()
                     .min_w(px(0.))
-                    .my(sp(2.))
-                    .mr(sp(2.))
-                    .rounded(px(radius::XL))
                     .bg(theme::panel_bg())
-                    .border_1()
+                    .border_l_1()
                     .border_color(theme::hairline())
                     .overflow_hidden()
                     .flex()
@@ -75,9 +80,11 @@ impl Render for Shell {
                             .min_h(px(0.))
                             .flex()
                             .flex_col()
+                            // Switching pages is routine, so it only softens the swap: a short fade,
+                            // no movement, the same as before the redesign.
                             .with_animation(
                                 ElementId::NamedInteger("page".into(), self.page.serial()),
-                                Animation::new(Duration::from_millis(160)).with_easing(ease_in_out),
+                                motion::animation_eased(160, ease_in_out),
                                 |this, t| this.opacity(0.2 + 0.8 * t),
                             )
                             .map_element(|this| this.child(page)),
@@ -188,10 +195,21 @@ impl Shell {
                         .fs(font::BODY)
                         .font_weight(FontWeight::MEDIUM)
                         .child(toast.message.clone())
+                        // One animation for the toast's whole life: it rises in, waits, and fades out
+                        // just before the timer in `show_toast` removes it.
                         .with_animation(
                             ElementId::NamedInteger("toast".into(), toast.serial),
-                            Animation::new(Duration::from_millis(180)).with_easing(ease_in_out),
-                            |this, t| this.opacity(t).mb(px(8.0 * (1.0 - t))),
+                            motion::linear(TOAST_MS),
+                            |this, t| {
+                                if motion::reduced() {
+                                    return this;
+                                }
+                                let ms = t * TOAST_MS as f32;
+                                let arrive = motion::ease_out((ms / 260.0).min(1.0));
+                                let leave = ((TOAST_MS as f32 - ms) / 220.0).clamp(0.0, 1.0);
+                                this.opacity(arrive.min(leave))
+                                    .mb(px(10.0 * (1.0 - arrive)))
+                            },
                         ),
                 )
                 .into_any_element(),
@@ -231,20 +249,25 @@ pub fn content_width(window: &Window) -> f32 {
     f(window.viewport_size().width) - theme::SIDEBAR_WIDTH - 8.0
 }
 
-/// Spanish thousands separator: "1.204".
+/// Thousands separator for the current language: "1.204" in Spanish, "1,204" in English.
 pub fn fmt_count(value: u64) -> String {
+    let separator = if hm_core::i18n::is_english() {
+        ','
+    } else {
+        '.'
+    };
     let digits = value.to_string();
     let mut out = String::with_capacity(digits.len() + digits.len() / 3);
     for (index, digit) in digits.chars().enumerate() {
         if index > 0 && (digits.len() - index).is_multiple_of(3) {
-            out.push('.');
+            out.push(separator);
         }
         out.push(digit);
     }
     out
 }
 
-/// Choosing between singular and plural, the honest way.
+/// Choosing between singular and plural, the honest way. Callers pass both forms through `t!`.
 pub fn plural(count: usize, one: &str, many: &str) -> String {
     if count == 1 {
         format!("1 {one}")

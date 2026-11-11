@@ -8,7 +8,7 @@ mod toolchains;
 mod tools;
 mod xcode;
 
-use hm_core::{fsutil, Action, Area, Finding, Recovery, Risk, ScanContext, Scanner};
+use hm_core::{fsutil, t, Action, Area, Finding, Recovery, Risk, ScanContext, Scanner};
 use rayon::prelude::*;
 
 use crate::util;
@@ -191,11 +191,15 @@ fn full_disk_access_notice(scanner_id: &str, key: &str, what_it_unlocks: &str) -
         scanner_id,
         Area::Developer,
         key,
-        "Hace falta Acceso total al disco",
+        t!(
+            "Hace falta Acceso total al disco",
+            "Full Disk Access is needed"
+        ),
     )
-    .group("Permisos")
+    .group(t!("Permisos", "Permissions"))
     .explanation(what_it_unlocks)
     .tag("permisos")
+    .tag(hm_core::TAG_NEEDS_FULL_DISK_ACCESS)
 }
 
 #[cfg(test)]
@@ -290,11 +294,8 @@ mod tests {
     fn no_command_uses_a_program_off_the_allow_list() {
         // Every program named in a table must be one the cleaner will actually run.
         let policy = hm_core::SafetyPolicy::new("/nonexistent", &[]);
-        let specs = packages::SPECS
-            .iter()
-            .chain(tools::SPECS)
-            .chain(xcode::SPECS);
-        for spec in specs {
+        let specs = [packages::specs(), tools::specs(), xcode::specs()].concat();
+        for spec in &specs {
             if let Removal::Command { program, .. } = spec.removal {
                 assert!(policy.check_command(program).is_ok(), "{program}");
             }
@@ -303,11 +304,8 @@ mod tests {
 
     #[test]
     fn review_findings_are_never_preselected_in_any_table() {
-        let specs = packages::SPECS
-            .iter()
-            .chain(tools::SPECS)
-            .chain(xcode::SPECS);
-        for spec in specs {
+        let specs = [packages::specs(), tools::specs(), xcode::specs()].concat();
+        for spec in &specs {
             if spec.risk == Risk::Review || spec.recovery == Recovery::None {
                 assert!(!spec.selected, "{} should not be selected", spec.key);
             }

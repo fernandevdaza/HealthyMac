@@ -117,10 +117,22 @@ pub fn run(program: &Path, args: &[&str], timeout: Duration) -> Result<CmdOutput
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .with_context(|| format!("no se pudo ejecutar {}", program.display()))?;
+        .with_context(|| {
+            crate::tf!(
+                "no se pudo ejecutar {}",
+                "could not run {}",
+                program.display()
+            )
+        })?;
 
-    let mut stdout_pipe = child.stdout.take().context("sin stdout")?;
-    let mut stderr_pipe = child.stderr.take().context("sin stderr")?;
+    let mut stdout_pipe = child
+        .stdout
+        .take()
+        .context(crate::t!("sin stdout", "no stdout"))?;
+    let mut stderr_pipe = child
+        .stderr
+        .take()
+        .context(crate::t!("sin stderr", "no stderr"))?;
     let stdout_reader = thread::spawn(move || {
         let mut bytes = Vec::new();
         let _ = stdout_pipe.read_to_end(&mut bytes);

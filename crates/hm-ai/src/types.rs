@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 use std::time::SystemTime;
 
+use hm_core::t;
 use serde::Serialize;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
@@ -80,7 +81,7 @@ impl RuntimeKind {
             RuntimeKind::Automatic1111 => "Automatic1111",
             RuntimeKind::DrawThings => "Draw Things",
             RuntimeKind::TorchHub => "PyTorch Hub",
-            RuntimeKind::Other => "Otro",
+            RuntimeKind::Other => t!("Otro", "Other"),
             RuntimeKind::OMlx => "oMLX",
             RuntimeKind::SentenceTransformers => "Sentence Transformers",
         }
@@ -126,10 +127,10 @@ pub enum UsageSignal {
 impl UsageSignal {
     pub fn label(self) -> &'static str {
         match self {
-            UsageSignal::LoadedNow => "Cargado ahora",
-            UsageSignal::RuntimeRecord => "Último uso",
-            UsageSignal::Modified => "Descargado",
-            UsageSignal::None => "Sin datos de uso",
+            UsageSignal::LoadedNow => t!("Cargado ahora", "Loaded now"),
+            UsageSignal::RuntimeRecord => t!("Último uso", "Last used"),
+            UsageSignal::Modified => t!("Descargado", "Downloaded"),
+            UsageSignal::None => t!("Sin datos de uso", "No usage data"),
         }
     }
 }
@@ -153,11 +154,11 @@ pub enum ModelFit {
 impl ModelFit {
     pub fn label(self) -> &'static str {
         match self {
-            ModelFit::Comfortable => "Cabe de sobra",
-            ModelFit::Tight => "Justo",
-            ModelFit::CpuOnly => "Excede la GPU",
-            ModelFit::TooLarge => "No cabe",
-            ModelFit::Unknown => "Desconocido",
+            ModelFit::Comfortable => t!("Cabe de sobra", "Fits easily"),
+            ModelFit::Tight => t!("Justo", "Tight fit"),
+            ModelFit::CpuOnly => t!("Excede la GPU", "Exceeds GPU"),
+            ModelFit::TooLarge => t!("No cabe", "Won't fit"),
+            ModelFit::Unknown => t!("Desconocido", "Unknown"),
         }
     }
 }

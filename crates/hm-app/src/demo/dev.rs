@@ -188,7 +188,8 @@ pub fn ports() -> Vec<ListeningPort> {
             user: "ana".to_string(),
             service_hint: hint.map(str::to_string),
         };
-    vec![
+    // Sorted by port, like the real scanner's output.
+    let mut ports = vec![
         port(
             3000,
             "node",
@@ -215,5 +216,7 @@ pub fn ports() -> Vec<ListeningPort> {
         ),
         port(11434, "ollama", 812, Some(".ollama"), Some("Ollama")),
         port(1234, "LM Studio", 13012, None, Some("LM Studio")),
-    ]
+    ];
+    ports.sort_by_key(|listener| listener.port);
+    ports
 }

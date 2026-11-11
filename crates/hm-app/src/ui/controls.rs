@@ -17,11 +17,22 @@ use crate::theme::{self, font, radius, sp};
 
 #[derive(Clone, Copy)]
 pub enum BtnKind {
-    Primary((Hsla, Hsla)),
+    /// Filled with the text colour. One per screen.
+    Primary,
     Secondary,
     Ghost,
     Danger,
+    /// Filled red: confirming something that cannot be taken back without care.
+    Destructive,
+    /// An action repeated on every row of a list. Quiet until the pointer is over its row, so a
+    /// column of identical buttons does not shout. The row carries `.group(ROW_GROUP)`.
+    Row,
+    /// The same, for actions that remove or stop something: it turns red as its row is hovered.
+    RowDanger,
 }
+
+/// The group name a list row gives itself so its `Row` and `RowDanger` buttons can wake up.
+pub const ROW_GROUP: &str = "list-row";
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum BtnSize {
@@ -49,8 +60,8 @@ impl Btn {
         }
     }
 
-    pub fn primary(label: impl Into<SharedString>, stops: (Hsla, Hsla)) -> Self {
-        Self::new(label, BtnKind::Primary(stops))
+    pub fn primary(label: impl Into<SharedString>) -> Self {
+        Self::new(label, BtnKind::Primary)
     }
 
     pub fn secondary(label: impl Into<SharedString>) -> Self {
@@ -63,6 +74,20 @@ impl Btn {
 
     pub fn danger(label: impl Into<SharedString>) -> Self {
         Self::new(label, BtnKind::Danger)
+    }
+
+    pub fn destructive(label: impl Into<SharedString>) -> Self {
+        Self::new(label, BtnKind::Destructive)
+    }
+
+    /// See [`BtnKind::Row`].
+    pub fn row_action(label: impl Into<SharedString>) -> Self {
+        Self::new(label, BtnKind::Row).size(BtnSize::Sm)
+    }
+
+    /// See [`BtnKind::RowDanger`].
+    pub fn row_danger(label: impl Into<SharedString>) -> Self {
+        Self::new(label, BtnKind::RowDanger).size(BtnSize::Sm)
     }
 
     pub fn size(mut self, size: BtnSize) -> Self {
@@ -86,18 +111,21 @@ impl Btn {
         id: impl Into<ElementId>,
         on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
     ) -> Stateful<Div> {
-        let (height, text, pad, corner, icon_size) = match self.size {
-            BtnSize::Sm => (26.0, font::CAPTION, 10.0, radius::SM + 1.0, 14.0),
-            BtnSize::Md => (32.0, font::BODY, 14.0, radius::MD, 15.0),
-            BtnSize::Lg => (44.0, font::SUBHEAD, 22.0, radius::LG, 18.0),
+        let (height, text, pad, icon_size) = match self.size {
+            BtnSize::Sm => (26.0, font::CAPTION, 10.0, 14.0),
+            BtnSize::Md => (32.0, font::BODY, 14.0, 15.0),
+            BtnSize::Lg => (40.0, font::BODY + 1.0, 20.0, 16.0),
         };
+        let corner = radius::SM;
         let disabled = self.disabled;
         let foreground = match self.kind {
             _ if disabled => theme::text_3(),
-            BtnKind::Primary(_) => theme::text_on_accent(),
+            BtnKind::Primary => theme::on_primary(),
             BtnKind::Secondary => theme::text_1(),
             BtnKind::Ghost => theme::text_2(),
             BtnKind::Danger => theme::rose(),
+            BtnKind::Destructive => gpui::white(),
+            BtnKind::Row | BtnKind::RowDanger => theme::text_3(),
         };
         let base = row()
             .id(id)
@@ -120,22 +148,34 @@ impl Btn {
             return base.bg(theme::surface_2());
         }
         let styled = match self.kind {
-            BtnKind::Primary(stops) => base
-                .bg(theme::gradient(stops))
+            BtnKind::Primary => base
+                .bg(theme::primary())
                 .font_weight(FontWeight::SEMIBOLD)
-                .hover(move |style| style.bg(theme::gradient(theme::lift(stops))))
-                .when(self.size == BtnSize::Lg, |this| {
-                    this.shadow(theme::glow(stops.1, 28.0, 0.28))
-                }),
+                .hover(|style| style.bg(theme::primary_hover())),
             BtnKind::Secondary => base
-                .bg(theme::surface_3())
-                .hover(|style| style.bg(theme::surface_4())),
+                .border_1()
+                .border_color(theme::hairline_strong())
+                .hover(|style| style.bg(theme::surface_2())),
             BtnKind::Ghost => {
                 base.hover(|style| style.bg(theme::surface_2()).text_color(theme::text_1()))
             }
             BtnKind::Danger => base
                 .bg(theme::rose().alpha(0.12))
                 .hover(|style| style.bg(theme::rose().alpha(0.2))),
+            BtnKind::Destructive => base
+                .bg(theme::rose())
+                .font_weight(FontWeight::SEMIBOLD)
+                .hover(|style| style.bg(theme::rose().opacity(0.85))),
+            BtnKind::Row => base
+                .group_hover(ROW_GROUP, |style| {
+                    style.bg(theme::surface_2()).text_color(theme::text_1())
+                })
+                .hover(|style| style.bg(theme::surface_3()).text_color(theme::text_1())),
+            BtnKind::RowDanger => base
+                .group_hover(ROW_GROUP, |style| {
+                    style.bg(theme::rose().alpha(0.1)).text_color(theme::rose())
+                })
+                .hover(|style| style.bg(theme::rose().alpha(0.2)).text_color(theme::rose())),
         };
         styled
             .cursor_pointer()
@@ -156,7 +196,7 @@ pub fn icon_button(
         .flex_none()
         .size(px(26.))
         .justify_center()
-        .rounded(px(radius::SM + 1.0))
+        .rounded(px(radius::SM))
         .cursor_pointer()
         .hover(|style| style.bg(theme::surface_3()))
         .active(|style| style.opacity(0.7))
@@ -166,13 +206,14 @@ pub fn icon_button(
 
 // ---- Checkbox ----------------------------------------------------------------------------------
 
-/// The hit area is larger than the box, because small targets are annoying.
+/// The hit area is larger than the box, because small targets are annoying. A ticked box is filled
+/// with the text colour: what is selected is a state, not an area's colour.
 pub fn checkbox(
     id: impl Into<ElementId>,
     state: GroupState,
-    accent: Hsla,
     on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
 ) -> Stateful<Div> {
+    let accent = theme::primary();
     let filled = matches!(state, GroupState::All | GroupState::Mixed);
     let glyph = match state {
         GroupState::All => Some(Icon::Check),
@@ -191,18 +232,18 @@ pub fn checkbox(
             row()
                 .size(px(16.))
                 .justify_center()
-                .rounded(px(5.))
+                .rounded(px(4.))
                 .when(filled, |this| this.bg(accent))
                 .when(!filled, |this| {
                     this.border_1()
                         .border_color(theme::hairline_strong())
                         .bg(theme::surface_1())
                         .group_hover("checkbox", |style| {
-                            style.border_color(accent.alpha(0.8)).bg(accent.alpha(0.1))
+                            style.border_color(accent.alpha(0.6)).bg(theme::surface_2())
                         })
                 })
                 .when_some(glyph, |this, which| {
-                    this.child(icon(which, 13.0, theme::text_on_accent()))
+                    this.child(icon(which, 13.0, theme::on_primary()))
                 }),
         )
 }
@@ -215,8 +256,8 @@ pub fn pill(text: impl Into<SharedString>, color: Hsla) -> Div {
         .flex_none()
         .h(px(20.))
         .px(sp(2.))
-        .rounded(px(10.))
-        .bg(color.alpha(0.13))
+        .rounded(px(radius::PILL))
+        .bg(color.alpha(0.14))
         .text_color(color)
         .fs(font::MICRO)
         .font_weight(FontWeight::MEDIUM)
@@ -229,8 +270,8 @@ pub fn tag(text: impl Into<SharedString>) -> Div {
     row()
         .flex_none()
         .h(px(20.))
-        .px(px(7.))
-        .rounded(px(5.))
+        .px(sp(2.))
+        .rounded(px(radius::PILL))
         .bg(theme::surface_2())
         .text_color(theme::text_2())
         .fs(font::MICRO)
@@ -242,10 +283,10 @@ pub fn dot(color: Hsla, size: f32) -> Div {
     div().flex_none().size(px(size)).rounded_full().bg(color)
 }
 
-/// A dot with a soft halo, for things happening right now. It does not pulse on purpose: a looping
-/// animation repaints the whole window every frame, which is a poor trade for a status light.
+/// A dot for things happening right now. It does not pulse on purpose: a looping animation
+/// repaints the whole window every frame, which is a poor trade for a status light.
 pub fn live_dot(color: Hsla) -> Div {
-    dot(color, 7.0).shadow(theme::glow(color, 6.0, 0.8))
+    dot(color, 7.0)
 }
 
 // ---- Spinner -----------------------------------------------------------------------------------
@@ -276,9 +317,9 @@ pub fn segmented(
     let mut container = row()
         .flex_none()
         .h(px(28.))
-        .p(sp(0.5))
-        .gap(sp(0.5))
-        .rounded(px(radius::MD))
+        .p(px(2.))
+        .gap(px(2.))
+        .rounded(px(radius::SM + 1.0))
         .bg(theme::surface_2());
     for (index, label) in labels.iter().enumerate() {
         let is_selected = index == selected;
@@ -289,11 +330,11 @@ pub fn segmented(
                 .h_full()
                 .px(sp(2.5))
                 .justify_center()
-                .rounded(px(radius::SM))
+                .rounded(px(radius::SM - 1.0))
                 .fs(font::CAPTION)
                 .whitespace_nowrap()
                 .when(is_selected, |this| {
-                    this.bg(theme::surface_4())
+                    this.bg(theme::raised())
                         .text_color(theme::text_1())
                         .font_weight(FontWeight::MEDIUM)
                 })
@@ -309,6 +350,7 @@ pub fn segmented(
     container
 }
 
+/// `accent` is the state the switch turns on: green for something wanted, red for something risky.
 pub fn toggle(
     id: impl Into<ElementId>,
     on: bool,
@@ -328,11 +370,7 @@ pub fn toggle(
         .bg(if on { accent } else { theme::surface_4() })
         .when(on, |this| this.justify_end())
         .on_click(on_click)
-        .child(div().size(px(16.)).rounded_full().bg(if on {
-            theme::text_on_accent()
-        } else {
-            theme::text_1()
-        }))
+        .child(div().size(px(16.)).rounded_full().bg(gpui::white()))
 }
 
 pub fn stepper(
@@ -345,7 +383,7 @@ pub fn stepper(
     row()
         .flex_none()
         .h(px(28.))
-        .rounded(px(radius::MD))
+        .rounded(px(radius::SM))
         .bg(theme::surface_2())
         .child(icon_button(
             ElementId::NamedInteger(id.clone(), 0),

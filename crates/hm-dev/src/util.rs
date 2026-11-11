@@ -6,8 +6,32 @@ use std::time::{Duration, SystemTime};
 
 use hm_core::exec::{self, CmdOutput};
 use hm_core::{
-    fsutil, Action, Finding, Recovery, Risk, SafetyPolicy, SafetyViolation, ScanContext,
+    fsutil, tf, Action, Finding, Recovery, Risk, SafetyPolicy, SafetyViolation, ScanContext,
 };
+
+/// A text in Spanish and English for a `static` table, where [`hm_core::t!`] cannot run. [`get`]
+/// picks the current language, as `t!` does.
+///
+/// [`get`]: Text::get
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Text {
+    es: &'static str,
+    en: &'static str,
+}
+
+impl Text {
+    pub(crate) const fn new(es: &'static str, en: &'static str) -> Self {
+        Self { es, en }
+    }
+
+    pub(crate) fn get(self) -> &'static str {
+        if hm_core::i18n::is_english() {
+            self.en
+        } else {
+            self.es
+        }
+    }
+}
 
 /// Long enough for `git status` on a big repository, short enough not to hold up a scan.
 pub(crate) const GIT_TIMEOUT: Duration = Duration::from_secs(10);
@@ -193,8 +217,9 @@ fn vet(ctx: &ScanContext, policy: &SafetyPolicy, mut finding: Finding) -> Option
     }
 
     if let Some(reason) = refusal {
-        finding.explanation = format!(
+        finding.explanation = tf!(
             "{} HealthyMac no puede limpiar esta ruta ({reason}).",
+            "{} HealthyMac can't clean this path ({reason}).",
             finding.explanation
         );
         finding.action = Action::ReportOnly;

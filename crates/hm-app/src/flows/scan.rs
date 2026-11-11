@@ -10,14 +10,23 @@ use futures::StreamExt;
 use gpui::Context;
 use hm_core::{run_scan, Area, CancelToken, Finding, ScanEvent, Scanner};
 
-use crate::logic::selection::is_actionable;
-use crate::state::{FindingRow, ScannerMeta, ScannerStatus, Shell};
+use crate::logic::selection::{is_actionable, needs_full_disk_access};
+use crate::state::{FindingRow, Heading, ScannerMeta, ScannerStatus, Shell};
 
 pub fn all_scanners() -> Vec<Box<dyn Scanner>> {
     let mut scanners = hm_system::scanners();
     scanners.extend(hm_dev::scanners());
     scanners.extend(hm_ai::scanners());
     scanners
+}
+
+/// The scanners this run shows, with their names in the current language.
+pub fn scanners_for(mode: &crate::state::RunMode) -> Vec<ScannerMeta> {
+    if mode.demo {
+        crate::demo::scan::meta(mode.stress)
+    } else {
+        scanner_meta(&all_scanners())
+    }
 }
 
 pub fn scanner_meta(scanners: &[Box<dyn Scanner>]) -> Vec<ScannerMeta> {
@@ -183,7 +192,7 @@ impl Shell {
 pub fn build_rows(findings: &[Finding], area: Area) -> Vec<FindingRow> {
     let mut by_scanner: HashMap<&str, Vec<usize>> = HashMap::new();
     for (index, finding) in findings.iter().enumerate() {
-        if finding.area == area {
+        if finding.area == area && !needs_full_disk_access(finding) {
             by_scanner
                 .entry(&finding.scanner_id)
                 .or_default()
@@ -205,6 +214,14 @@ pub fn build_rows(findings: &[Finding], area: Area) -> Vec<FindingRow> {
         let total = total_of(&members);
         let mut sorted = members;
         sorted.sort_by(|&a, &b| findings[b].size.cmp(&findings[a].size).then(a.cmp(&b)));
+        if let [index] = sorted[..] {
+            rows.push(FindingRow::Item {
+                index,
+                heading: Some(Heading::Scanner),
+            });
+            rows.push(FindingRow::Gap);
+            continue;
+        }
         rows.push(FindingRow::Scanner {
             scanner_id: scanner_id.to_string(),
             members: Rc::new(sorted.clone()),
@@ -222,20 +239,29 @@ pub fn build_rows(findings: &[Finding], area: Area) -> Vec<FindingRow> {
                 },
             }
         }
-        rows.extend(
-            ungrouped
-                .into_iter()
-                .map(|index| FindingRow::Item { index }),
-        );
+        rows.extend(ungrouped.into_iter().map(|index| FindingRow::Item {
+            index,
+            heading: None,
+        }));
         groups.sort_by_key(|group| std::cmp::Reverse(total_of(&group.1)));
         for (name, list) in groups {
+            if let [index] = list[..] {
+                rows.push(FindingRow::Item {
+                    index,
+                    heading: Some(Heading::Group(name)),
+                });
+                continue;
+            }
             let total = total_of(&list);
             rows.push(FindingRow::Group {
                 title: name,
                 members: Rc::new(list.clone()),
                 total,
             });
-            rows.extend(list.into_iter().map(|index| FindingRow::Item { index }));
+            rows.extend(list.into_iter().map(|index| FindingRow::Item {
+                index,
+                heading: None,
+            }));
         }
         rows.push(FindingRow::Gap);
     }
@@ -255,28 +281,67 @@ mod tests {
         finding
     }
 
+    fn shape(findings: &[Finding], rows: &[FindingRow]) -> Vec<String> {
+        rows.iter()
+            .map(|row| match row {
+                FindingRow::Scanner { scanner_id, .. } => format!("S:{scanner_id}"),
+                FindingRow::Group { title, .. } => format!("G:{title}"),
+                FindingRow::Item { index, heading } => {
+                    let title = &findings[*index].title;
+                    match heading {
+                        None => format!("I:{title}"),
+                        Some(Heading::Scanner) => format!("I:{title}^S"),
+                        Some(Heading::Group(group)) => format!("I:{title}^{group}"),
+                    }
+                }
+                FindingRow::Gap => "-".to_string(),
+            })
+            .collect()
+    }
+
     #[test]
     fn rows_are_grouped_and_largest_first() {
         let findings = vec![
             finding("small", "a", 1, None),
+            finding("small", "e", 2, None),
             finding("big", "b", 10, Some("G1")),
+            finding("big", "f", 5, Some("G1")),
             finding("big", "c", 100, None),
             finding("big", "d", 50, Some("G2")),
+            finding("big", "g", 40, Some("G2")),
         ];
         let rows = build_rows(&findings, Area::System);
-        let shape: Vec<String> = rows
-            .iter()
-            .map(|row| match row {
-                FindingRow::Scanner { scanner_id, .. } => format!("S:{scanner_id}"),
-                FindingRow::Group { title, .. } => format!("G:{title}"),
-                FindingRow::Item { index } => format!("I:{}", findings[*index].title),
-                FindingRow::Gap => "-".to_string(),
-            })
-            .collect();
         assert_eq!(
-            shape,
-            ["S:big", "I:c", "G:G2", "I:d", "G:G1", "I:b", "-", "S:small", "I:a", "-"]
+            shape(&findings, &rows),
+            [
+                "S:big", "I:c", "G:G2", "I:d", "I:g", "G:G1", "I:b", "I:f", "-", "S:small", "I:e",
+                "I:a", "-"
+            ]
         );
+    }
+
+    #[test]
+    fn a_lone_item_stands_in_for_its_heading() {
+        let findings = vec![
+            finding("alone", "a", 1, None),
+            finding("big", "b", 10, Some("G1")),
+            finding("big", "c", 100, None),
+        ];
+        let rows = build_rows(&findings, Area::System);
+        assert_eq!(
+            shape(&findings, &rows),
+            ["S:big", "I:c", "I:b^G1", "-", "I:a^S", "-"]
+        );
+    }
+
+    #[test]
+    fn missing_access_notes_are_left_out_of_the_list() {
+        let mut note = Finding::new("large", Area::System, "sin_acceso", "Falta acceso")
+            .tag(hm_core::TAG_NEEDS_FULL_DISK_ACCESS);
+        note.action = hm_core::Action::ReportOnly;
+        let findings = vec![finding("caches", "a", 1, None), note];
+        let rows = build_rows(&findings, Area::System);
+        assert_eq!(shape(&findings, &rows), ["I:a^S", "-"]);
     }
 
     #[test]

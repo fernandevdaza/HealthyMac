@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::Result;
-use hm_core::{fsutil, Action, Area, Finding, Recovery, Risk, ScanContext, Scanner};
+use hm_core::{fsutil, t, tf, Action, Area, Finding, Recovery, Risk, ScanContext, Scanner};
 use rayon::prelude::*;
 
 use crate::sweep::{pins_of, shared_sweep, PinKind};
@@ -29,11 +29,14 @@ impl Scanner for ToolchainScanner {
     }
 
     fn name(&self) -> &'static str {
-        "Versiones de lenguajes"
+        t!("Versiones de lenguajes", "Language versions")
     }
 
     fn description(&self) -> &'static str {
-        "Versiones de Rust, Node y Python que tienes instaladas además de la que usas."
+        t!(
+            "Versiones de Rust, Node y Python que tienes instaladas además de la que usas.",
+            "Versions of Rust, Node and Python you have installed besides the one you use."
+        )
     }
 
     fn area(&self) -> Area {
@@ -87,7 +90,7 @@ fn project_names(users: &[&PathBuf]) -> String {
     if names.len() > 4 {
         let rest = names.len() - 3;
         names.truncate(3);
-        format!("{} y {rest} más", names.join(", "))
+        tf!("{} y {rest} más", "{} and {rest} more", names.join(", "))
     } else {
         names.join(", ")
     }
@@ -255,12 +258,14 @@ fn rust_findings(ctx: &ScanContext, rustup_list: Option<&str>) -> Vec<Finding> {
                     args: vec!["toolchain".to_string(), "uninstall".to_string(), name.clone()],
                 });
             Some(if users.is_empty() {
-                finding.risk(Risk::Moderate).explanation(
+                finding.risk(Risk::Moderate).explanation(t!(
                     "Una versión de Rust que no es la predeterminada. Ningún proyecto de tus carpetas de código la pide. rustup puede volver a instalarla.",
-                )
+                    "A Rust version that is not the default. No project in your code folders asks for it. rustup can install it again."
+                ))
             } else {
-                finding.risk(Risk::Review).tag("fijada").explanation(format!(
+                finding.risk(Risk::Review).tag("fijada").explanation(tf!(
                     "Una versión de Rust que piden estos proyectos: {}. rustup la descargará de nuevo cuando vuelvas a compilarlos.",
+                    "A Rust version these projects ask for: {}. rustup will download it again when you build them next.",
                     project_names(&users)
                 ))
             })
@@ -324,20 +329,23 @@ fn node_finding(
 
     let mut notes = Vec::new();
     if !users.is_empty() {
-        notes.push(format!(
+        notes.push(tf!(
             "La piden estos proyectos: {}.",
+            "These projects ask for it: {}.",
             project_names(&users)
         ));
     }
     if !globals.is_empty() {
-        notes.push(format!(
+        notes.push(tf!(
             "Se perderían sus paquetes globales: {}.",
+            "Its global packages would be lost: {}.",
             globals.join(", ")
         ));
     }
     let needs_review = !notes.is_empty();
-    notes.push(format!(
-        "Se puede volver a instalar con {manager}, pero los paquetes globales habría que instalarlos de nuevo."
+    notes.push(tf!(
+        "Se puede volver a instalar con {manager}, pero los paquetes globales habría que instalarlos de nuevo.",
+        "{manager} can install it again, but global packages would have to be reinstalled."
     ));
     Some(
         finding
@@ -346,8 +354,9 @@ fn node_finding(
             } else {
                 Risk::Moderate
             })
-            .explanation(format!(
+            .explanation(tf!(
                 "Una versión de Node que no es la activa. {}",
+                "A Node version that is not the active one. {}",
                 notes.join(" ")
             )),
     )
@@ -653,23 +662,39 @@ fn pyenv_findings(ctx: &ScanContext) -> Vec<Finding> {
 
             let mut notes = Vec::new();
             if !users.is_empty() {
-                notes.push(format!(
+                notes.push(tf!(
                     "La usan estos proyectos, directamente o con un entorno virtual: {}.",
+                    "These projects use it, directly or through a virtual environment: {}.",
                     project_names(&users)
                 ));
             }
             if has_envs {
-                notes.push("Contiene entornos de pyenv-virtualenv, que se perderían.".to_string());
+                notes.push(
+                    t!(
+                        "Contiene entornos de pyenv-virtualenv, que se perderían.",
+                        "It holds pyenv-virtualenv environments, which would be lost."
+                    )
+                    .to_string(),
+                );
             }
             if !packages.is_empty() {
-                notes.push(format!(
+                notes.push(tf!(
                     "Tiene {} instalados que se perderían.",
-                    util::count(packages.len() as u64, "paquete", "paquetes")
+                    "It has {} installed that would be lost.",
+                    util::count(
+                        packages.len() as u64,
+                        t!("paquete", "package"),
+                        t!("paquetes", "packages")
+                    )
                 ));
             }
             let needs_review = !notes.is_empty();
             notes.push(
-                "Los entornos virtuales creados con ella dejarán de funcionar. Se puede volver a instalar con «pyenv install», que la compila de nuevo.".to_string(),
+                t!(
+                    "Los entornos virtuales creados con ella dejarán de funcionar. Se puede volver a instalar con «pyenv install», que la compila de nuevo.",
+                    "Virtual environments created with it will stop working. “pyenv install” can install it again, building it from source."
+                )
+                .to_string(),
             );
             Some(
                 Finding::new(ID, Area::Developer, format!("python:{name}"), format!("Python {name}"))
@@ -679,8 +704,9 @@ fn pyenv_findings(ctx: &ScanContext) -> Vec<Finding> {
                     .risk(if needs_review { Risk::Review } else { Risk::Moderate })
                     .recovery(Recovery::Redownload)
                     .selected(false)
-                    .explanation(format!(
+                    .explanation(tf!(
                         "Una versión de Python que no es la activa. {}",
+                        "A Python version that is not the active one. {}",
                         notes.join(" ")
                     )),
             )

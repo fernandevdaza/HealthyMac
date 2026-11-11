@@ -4,7 +4,7 @@ use gpui::{
     div, list, prelude::*, px, AnyElement, Context, ElementId, FontWeight, SharedString, Window,
 };
 use hm_core::fmt::{human_age, human_size};
-use hm_core::{Area, Finding, Recovery, Risk};
+use hm_core::{t, tf, Area, Finding, Recovery, Risk};
 use hm_dev::types::{DockerSummary, DockerUsage, ProjectInfo, ProjectKind};
 
 use super::{content_width, plural};
@@ -36,7 +36,7 @@ fn kind_label(kind: ProjectKind) -> &'static str {
         ProjectKind::Php => "PHP",
         ProjectKind::DotNet => ".NET",
         ProjectKind::CMake => "CMake",
-        ProjectKind::Other => "Otro",
+        ProjectKind::Other => t!("Otro", "Other"),
     }
 }
 
@@ -61,8 +61,9 @@ pub fn artifact_findings(project: &ProjectInfo, scanned: &[Finding]) -> Vec<Find
                 )
                 .group(project.name.clone())
                 .trash(&artifact.path)
-                .explanation(format!(
+                .explanation(tf!(
                     "{} de {}. Se vuelve a generar la próxima vez que instales dependencias o compiles.",
+                    "{} in {}. It comes back the next time you install dependencies or build.",
                     artifact.label, project.name
                 ))
                 .size(artifact.size)
@@ -85,11 +86,11 @@ impl Shell {
                     div()
                         .fs(font::CAPTION)
                         .text_color(theme::text_2())
-                        .child("Buscando…"),
+                        .child(t!("Buscando…", "Searching…")),
                 )
                 .into_any_element()
         } else {
-            Btn::secondary("Actualizar")
+            Btn::secondary(t!("Actualizar", "Refresh"))
                 .icon(Icon::Refresh)
                 .build(
                     "projects-reload",
@@ -98,8 +99,11 @@ impl Shell {
                 .into_any_element()
         };
         let header = page_header(
-            "Proyectos",
-            "Lo que tus proyectos guardan y puede volver a generarse. El código no se toca.",
+            t!("Proyectos", "Projects"),
+            t!(
+                "Lo que tus proyectos guardan y puede volver a generarse. El código no se toca.",
+                "What your projects keep that can be generated again. Your code is never touched."
+            ),
             vec![action],
         );
 
@@ -111,7 +115,10 @@ impl Shell {
                         .px(px(GUTTER))
                         .child(notice(
                             NoticeKind::Error,
-                            "No hemos podido buscar tus proyectos",
+                            t!(
+                                "No hemos podido buscar tus proyectos",
+                                "Couldn't search for your projects"
+                            ),
                             Some(error.into()),
                             None,
                         ))
@@ -119,9 +126,12 @@ impl Shell {
                 } else {
                     empty_state(
                         Icon::Folder,
-                        theme::area_color(ACCENT_AREA),
-                        "Buscando proyectos",
-                        "Recorremos tus carpetas de código midiendo node_modules, target y compañía.",
+                        theme::text_2(),
+                        t!("Buscando proyectos", "Looking for projects"),
+                        t!(
+                            "Recorremos tus carpetas de código midiendo node_modules, target y compañía.",
+                            "Going through your code folders, measuring node_modules, target and the like."
+                        ),
                         None,
                     )
                     .into_any_element()
@@ -192,8 +202,10 @@ impl Shell {
             .map(|project| project.artifact_bytes)
             .fold(0, u64::saturating_add);
         let idle_days = self.ctx.config.project_idle_days;
-        let labels: Vec<SharedString> =
-            vec!["Todos".into(), format!("Parados {idle_days}+ días").into()];
+        let labels: Vec<SharedString> = vec![
+            t!("Todos", "All").into(),
+            tf!("Parados {idle_days}+ días", "Idle {idle_days}+ days").into(),
+        ];
         let selected = usize::from(self.projects.filter == ProjectFilter::Idle);
         let entity = cx.entity().downgrade();
         let count = self.projects.order.len();
@@ -208,7 +220,7 @@ impl Shell {
                     .gap(sp(3.5))
                     .items_end()
                     .child(if total == 0 {
-                        big_number("Nada", font::DISPLAY, theme::text_3())
+                        big_number(t!("Nada", "Nothing"), font::DISPLAY, theme::text_3())
                     } else {
                         big_number(human_size(total), font::DISPLAY, theme::text_1())
                     })
@@ -219,7 +231,11 @@ impl Shell {
                             .pb(px(5.))
                             .fs(font::CAPTION)
                             .text_color(theme::text_2())
-                            .child(format!("en artefactos, {}", plural(count, "proyecto", "proyectos"))),
+                            .child(tf!(
+                                "en artefactos, {}",
+                                "in build artifacts, {}",
+                                plural(count, t!("proyecto", "project"), t!("proyectos", "projects"))
+                            )),
                     )
                     .child(div().pb(sp(1.)).child(segmented(
                         "project-filter",
@@ -246,9 +262,15 @@ impl Shell {
                         .fs(font::BODY)
                         .text_color(theme::text_2())
                         .child(if self.projects.filter == ProjectFilter::Idle {
-                            "Ningún proyecto lleva tanto tiempo parado."
+                            t!(
+                                "Ningún proyecto lleva tanto tiempo parado.",
+                                "No project has been idle that long."
+                            )
                         } else {
-                            "No hemos encontrado proyectos. Si tu código vive en otra carpeta, añádela en Ajustes."
+                            t!(
+                                "No hemos encontrado proyectos. Si tu código vive en otra carpeta, añádela en Ajustes.",
+                                "No projects found. If your code lives in another folder, add it in Settings."
+                            )
                         }),
                 )
             })
@@ -337,7 +359,10 @@ impl Shell {
                                                         |this, branch| this.child(branch),
                                                     )
                                                     .when(!git.status_known, |this| {
-                                                        this.child("estado desconocido")
+                                                        this.child(t!(
+                                                            "estado desconocido",
+                                                            "status unknown"
+                                                        ))
                                                     })
                                                     .when(git.dirty, |this| {
                                                         this.child(dot(theme::amber(), 6.0))
@@ -348,11 +373,11 @@ impl Shell {
                                                         |this, count| {
                                                             this.child(
                                                                 row()
-                                                                    .text_color(theme::violet())
+                                                                    .text_color(theme::text_2())
                                                                     .child(icon(
                                                                         Icon::ArrowUp,
                                                                         11.0,
-                                                                        theme::violet(),
+                                                                        theme::text_2(),
                                                                     ))
                                                                     .child(count.to_string()),
                                                             )
@@ -403,7 +428,7 @@ impl Shell {
                                 }),
                         )
                         .child(
-                            Btn::secondary("Limpiar")
+                            Btn::secondary(t!("Limpiar", "Clean"))
                                 .size(BtnSize::Sm)
                                 .disabled(project.artifacts.is_empty())
                                 .build(
@@ -415,8 +440,8 @@ impl Shell {
                                         cx.stop_propagation();
                                         let items = artifact_findings(&target, &this.findings);
                                         this.open_review(
-                                            format!("Limpiar {}", target.name),
-                                            "Limpiar artefactos",
+                                            tf!("Limpiar {}", "Clean {}", target.name),
+                                            t!("Limpiar artefactos", "Clean build artifacts"),
                                             items,
                                             cx,
                                         );
@@ -440,8 +465,9 @@ impl Shell {
                     + docker.volumes.reclaimable
                     + docker.build_cache.reclaimable;
                 let image_note = if docker.disk_image_readable && docker.disk_image_bytes > 0 {
-                    Some(format!(
+                    Some(tf!(
                         "La imagen de disco de la máquina virtual ocupa {}, a menudo bastante más de lo que Docker declara.",
+                        "The virtual machine's disk image takes {}, often a lot more than Docker reports.",
                         human_size(docker.disk_image_bytes)
                     ))
                 } else {
@@ -455,25 +481,25 @@ impl Shell {
                             row()
                                 .gap(sp(2.5))
                                 .mb(sp(2.5))
-                                .child(icon(Icon::Container, 16.0, theme::area_color(ACCENT_AREA)))
+                                .child(icon(Icon::Container, 16.0, theme::text_2()))
                                 .child(section_title(docker.runtime.clone()))
                                 .child(if docker.daemon_running {
                                     row()
                                         .gap(sp(1.5))
                                         .child(live_dot(theme::green()))
-                                        .child(div().fs(font::CAPTION).text_color(theme::text_2()).child("Activo"))
+                                        .child(div().fs(font::CAPTION).text_color(theme::text_2()).child(t!("Activo", "Running")))
                                         .into_any_element()
                                 } else {
                                     div()
                                         .fs(font::CAPTION)
                                         .text_color(theme::text_3())
-                                        .child("Parado")
+                                        .child(t!("Parado", "Stopped"))
                                         .into_any_element()
                                 })
                                 .child(div().flex_1())
                                 .when(reclaimable > 0, |this| {
                                     this.child(
-                                        Btn::ghost(format!("{} recuperables en Developer", human_size(reclaimable)))
+                                        Btn::ghost(tf!("{} recuperables en Developer", "{} reclaimable in Developer", human_size(reclaimable)))
                                             .size(BtnSize::Sm)
                                             .build(
                                                 "docker-goto",
@@ -489,10 +515,10 @@ impl Shell {
                                 row()
                                     .w_full()
                                     .gap(sp(2.5))
-                                    .child(docker_stat("Imágenes", &docker.images))
-                                    .child(docker_stat("Contenedores", &docker.containers))
-                                    .child(docker_stat("Volúmenes", &docker.volumes))
-                                    .child(docker_stat("Caché de build", &docker.build_cache)),
+                                    .child(docker_stat(t!("Imágenes", "Images"), &docker.images))
+                                    .child(docker_stat(t!("Contenedores", "Containers"), &docker.containers))
+                                    .child(docker_stat(t!("Volúmenes", "Volumes"), &docker.volumes))
+                                    .child(docker_stat(t!("Caché de build", "Build cache"), &docker.build_cache)),
                             )
                         })
                         .when(!docker.usage_known, |this| {
@@ -500,7 +526,10 @@ impl Shell {
                                 div()
                                     .fs(font::CAPTION)
                                     .text_color(theme::text_2())
-                                    .child("Con el motor parado no sabemos cuánto ocupa cada cosa. Arráncalo y actualiza para verlo."),
+                                    .child(t!(
+                                        "Con el motor parado no sabemos cuánto ocupa cada cosa. Arráncalo y actualiza para verlo.",
+                                        "With the engine stopped we can't tell how much each part takes. Start it and refresh to see."
+                                    )),
                             )
                         })
                         .when_some(image_note, |this, note| {
@@ -534,9 +563,14 @@ fn docker_stat(label: &'static str, usage: &DockerUsage) -> impl IntoElement {
                 .tabular()
                 .text_color(theme::text_3())
                 .child(if usage.reclaimable > 0 {
-                    format!("{} · {} libres", usage.count, human_size(usage.reclaimable))
+                    tf!(
+                        "{} · {} libres",
+                        "{} · {} reclaimable",
+                        usage.count,
+                        human_size(usage.reclaimable)
+                    )
                 } else {
-                    format!("{} en total", usage.count)
+                    tf!("{} en total", "{} in total", usage.count)
                 }),
         )
 }
@@ -554,16 +588,19 @@ fn project_details(project: &ProjectInfo) -> impl IntoElement {
                         .mb(sp(1.))
                         .gap(sp(1.5))
                         .when(git.dirty, |this| {
-                            this.child(pill("Cambios sin confirmar", theme::amber()))
+                            this.child(pill(
+                                t!("Cambios sin confirmar", "Uncommitted changes"),
+                                theme::amber(),
+                            ))
                         })
                         .when(git.unpushed_commits.unwrap_or(0) > 0, |this| {
                             this.child(pill(
                                 plural(
                                     git.unpushed_commits.unwrap_or(0) as usize,
-                                    "commit sin subir",
-                                    "commits sin subir",
+                                    t!("commit sin subir", "unpushed commit"),
+                                    t!("commits sin subir", "unpushed commits"),
                                 ),
-                                theme::violet(),
+                                theme::text_2(),
                             ))
                         }),
                 )
@@ -573,8 +610,9 @@ fn project_details(project: &ProjectInfo) -> impl IntoElement {
                     div()
                         .fs(font::CAPTION)
                         .text_color(theme::text_3())
-                        .child(format!(
+                        .child(tf!(
                             "Historial de git: {} (no se toca)",
+                            "Git history: {} (not touched)",
                             human_size(git.git_dir_bytes)
                         )),
                 )
@@ -585,7 +623,10 @@ fn project_details(project: &ProjectInfo) -> impl IntoElement {
                 div()
                     .fs(font::CAPTION)
                     .text_color(theme::text_2())
-                    .child("Este proyecto no tiene artefactos que limpiar."),
+                    .child(t!(
+                        "Este proyecto no tiene artefactos que limpiar.",
+                        "This project has no build artifacts to clean."
+                    )),
             )
         })
         .children(project.artifacts.iter().map(|artifact| {

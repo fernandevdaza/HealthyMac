@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
-use hm_core::exec;
+use hm_core::{exec, t, tf};
 
 use crate::types::ListeningPort;
 
@@ -124,73 +124,98 @@ fn parse_cwds(output: &str) -> HashMap<u32, PathBuf> {
     cwds
 }
 
-/// Processes that say what they are regardless of the port.
-const PROCESS_HINTS: &[(&str, &str)] = &[
-    ("ollama", "Ollama"),
-    ("LM Studio", "LM Studio"),
-    ("lms", "LM Studio"),
-    ("llmster", "LM Studio"),
-    ("postgres", "PostgreSQL"),
-    ("redis-server", "Redis"),
-    ("mysqld", "MySQL"),
-    ("mariadbd", "MariaDB"),
-    ("mongod", "MongoDB"),
-    ("nginx", "nginx"),
-    ("httpd", "Apache"),
-    ("caddy", "Caddy"),
-    ("adb", "Android Debug Bridge"),
-    ("rapportd", "Continuidad de macOS"),
-];
+/// Processes that say what they are regardless of the port. Built on each call rather than kept in a
+/// `const`, so its text follows the current language.
+fn process_hints() -> Vec<(&'static str, &'static str)> {
+    vec![
+        ("ollama", "Ollama"),
+        ("LM Studio", "LM Studio"),
+        ("lms", "LM Studio"),
+        ("llmster", "LM Studio"),
+        ("postgres", "PostgreSQL"),
+        ("redis-server", "Redis"),
+        ("mysqld", "MySQL"),
+        ("mariadbd", "MariaDB"),
+        ("mongod", "MongoDB"),
+        ("nginx", "nginx"),
+        ("httpd", "Apache"),
+        ("caddy", "Caddy"),
+        ("adb", "Android Debug Bridge"),
+        ("rapportd", t!("Continuidad de macOS", "macOS Continuity")),
+    ]
+}
 
-const WELL_KNOWN_PORTS: &[(u16, &str)] = &[
-    (80, "Servidor web"),
-    (443, "Servidor web seguro"),
-    (1234, "LM Studio"),
-    (1313, "Hugo"),
-    (1337, "Strapi"),
-    (1420, "Tauri"),
-    (2181, "ZooKeeper"),
-    (3000, "Next.js u otro servidor de desarrollo"),
-    (3001, "Servidor de desarrollo"),
-    (3306, "MySQL"),
-    (4000, "Servidor de desarrollo"),
-    (4173, "Vista previa de Vite"),
-    (4200, "Angular"),
-    (4321, "Astro"),
-    (5000, "Flask u otro servidor de desarrollo"),
-    (5173, "Vite"),
-    (5174, "Vite"),
-    (5432, "PostgreSQL"),
-    (5672, "RabbitMQ"),
-    (6006, "Storybook"),
-    (6379, "Redis"),
-    (8000, "Django, FastAPI u otro servidor de desarrollo"),
-    (8080, "Servidor de desarrollo"),
-    (8081, "Metro de React Native"),
-    (8888, "Jupyter"),
-    (9000, "Servidor de desarrollo"),
-    (9092, "Kafka"),
-    (9200, "Elasticsearch"),
-    (9229, "Depurador de Node"),
-    (11434, "Ollama"),
-    (15672, "Panel de RabbitMQ"),
-    (19000, "Expo"),
-    (19006, "Expo"),
-    (27017, "MongoDB"),
-];
+/// What usually listens on a port, by convention. A function for the same reason as
+/// [`process_hints`].
+fn well_known_ports() -> Vec<(u16, &'static str)> {
+    vec![
+        (80, t!("Servidor web", "Web server")),
+        (443, t!("Servidor web seguro", "Secure web server")),
+        (1234, "LM Studio"),
+        (1313, "Hugo"),
+        (1337, "Strapi"),
+        (1420, "Tauri"),
+        (2181, "ZooKeeper"),
+        (
+            3000,
+            t!(
+                "Next.js u otro servidor de desarrollo",
+                "Next.js or another dev server"
+            ),
+        ),
+        (3001, t!("Servidor de desarrollo", "Dev server")),
+        (3306, "MySQL"),
+        (4000, t!("Servidor de desarrollo", "Dev server")),
+        (4173, t!("Vista previa de Vite", "Vite preview")),
+        (4200, "Angular"),
+        (4321, "Astro"),
+        (
+            5000,
+            t!(
+                "Flask u otro servidor de desarrollo",
+                "Flask or another dev server"
+            ),
+        ),
+        (5173, "Vite"),
+        (5174, "Vite"),
+        (5432, "PostgreSQL"),
+        (5672, "RabbitMQ"),
+        (6006, "Storybook"),
+        (6379, "Redis"),
+        (
+            8000,
+            t!(
+                "Django, FastAPI u otro servidor de desarrollo",
+                "Django, FastAPI or another dev server"
+            ),
+        ),
+        (8080, t!("Servidor de desarrollo", "Dev server")),
+        (8081, t!("Metro de React Native", "React Native Metro")),
+        (8888, "Jupyter"),
+        (9000, t!("Servidor de desarrollo", "Dev server")),
+        (9092, "Kafka"),
+        (9200, "Elasticsearch"),
+        (9229, t!("Depurador de Node", "Node debugger")),
+        (11434, "Ollama"),
+        (15672, t!("Panel de RabbitMQ", "RabbitMQ dashboard")),
+        (19000, "Expo"),
+        (19006, "Expo"),
+        (27017, "MongoDB"),
+    ]
+}
 
-/// A friendly guess in Spanish at what is listening. What the process says about itself beats the
-/// port, which is only a convention.
+/// A friendly guess at what is listening. What the process says about itself beats the port, which
+/// is only a convention.
 fn service_hint(port: u16, process_name: &str) -> Option<String> {
     let lower = process_name.to_lowercase();
-    let by_port = WELL_KNOWN_PORTS
-        .iter()
+    let by_port = well_known_ports()
+        .into_iter()
         .find(|(known, _)| *known == port)
-        .map(|(_, hint)| *hint);
+        .map(|(_, hint)| hint);
 
     // macOS's AirPlay Receiver takes these two ports, to the confusion of Flask developers.
     if lower == "controlcenter" && matches!(port, 5000 | 7000) {
-        return Some("Receptor de AirPlay de macOS".to_string());
+        return Some(t!("Receptor de AirPlay de macOS", "macOS AirPlay Receiver").to_string());
     }
     // A container's published port shows up as Docker itself, so the port says more.
     if lower.starts_with("com.docker")
@@ -199,16 +224,20 @@ fn service_hint(port: u16, process_name: &str) -> Option<String> {
         || lower.contains("orbstack")
     {
         return Some(match by_port {
-            Some(hint) => format!("{hint} (contenedor)"),
-            None => "Puerto publicado por un contenedor".to_string(),
+            Some(hint) => tf!("{hint} (contenedor)", "{hint} (container)"),
+            None => t!(
+                "Puerto publicado por un contenedor",
+                "Port published by a container"
+            )
+            .to_string(),
         });
     }
-    for (needle, hint) in PROCESS_HINTS {
-        if process_name == *needle
+    for (needle, hint) in process_hints() {
+        if process_name == needle
             || lower == needle.to_lowercase()
             || lower.starts_with(&format!("{}-", needle.to_lowercase()))
         {
-            return Some((*hint).to_string());
+            return Some(hint.to_string());
         }
     }
     by_port.map(str::to_string)
@@ -228,14 +257,21 @@ pub fn list_listening() -> Result<Vec<ListeningPort>> {
         &["-nP", "-iTCP", "-sTCP:LISTEN", "-F", "pcuLPn", "+c", "0"],
         TIMEOUT,
     )
-    .context("no se pudo ejecutar lsof")?;
+    .context(t!("no se pudo ejecutar lsof", "could not run lsof"))?;
     if output.timed_out {
-        bail!("lsof no terminó a tiempo");
+        bail!(t!(
+            "lsof no terminó a tiempo",
+            "lsof did not finish in time"
+        ));
     }
     // lsof exits with 1 when nothing matched, which is not an error. Only trust it to have failed
     // when it also complained and gave nothing back.
     if !output.success() && output.stdout.trim().is_empty() && !output.stderr.trim().is_empty() {
-        bail!("lsof falló: {}", output.stderr.trim());
+        bail!(tf!(
+            "lsof falló: {}",
+            "lsof failed: {}",
+            output.stderr.trim()
+        ));
     }
 
     // SAFETY: getuid has no preconditions and cannot fail.
@@ -307,13 +343,22 @@ fn process_owner(pid: i32) -> std::io::Result<(u32, u32)> {
 /// wrapping around to -1 would take down the user's whole session.
 fn refuse_pid(pid: u32) -> Result<i32> {
     if pid <= 1 {
-        bail!("el proceso {pid} está protegido");
+        bail!(tf!(
+            "el proceso {pid} está protegido",
+            "process {pid} is protected"
+        ));
     }
     let Ok(signed) = i32::try_from(pid) else {
-        bail!("{pid} no es un identificador de proceso válido");
+        bail!(tf!(
+            "{pid} no es un identificador de proceso válido",
+            "{pid} is not a valid process ID"
+        ));
     };
     if pid == std::process::id() {
-        bail!("HealthyMac no puede terminarse a sí mismo");
+        bail!(t!(
+            "HealthyMac no puede terminarse a sí mismo",
+            "HealthyMac can't terminate itself"
+        ));
     }
     Ok(signed)
 }
@@ -326,23 +371,42 @@ pub fn terminate(pid: u32, force: bool) -> Result<()> {
     let (real, effective) = match process_owner(target) {
         Ok(owner) => owner,
         Err(error) => match error.raw_os_error() {
-            Some(libc::ESRCH) => bail!("el proceso {pid} ya no existe"),
-            Some(libc::EPERM) => bail!("el proceso {pid} es de otro usuario"),
+            Some(libc::ESRCH) => bail!(tf!(
+                "el proceso {pid} ya no existe",
+                "process {pid} no longer exists"
+            )),
+            Some(libc::EPERM) => bail!(tf!(
+                "el proceso {pid} es de otro usuario",
+                "process {pid} belongs to another user"
+            )),
             _ => {
-                return Err(error).with_context(|| format!("no se pudo comprobar el proceso {pid}"))
+                return Err(error).with_context(|| {
+                    tf!(
+                        "no se pudo comprobar el proceso {pid}",
+                        "could not check process {pid}"
+                    )
+                })
             }
         },
     };
     // SAFETY: getuid has no preconditions and cannot fail.
     let me = unsafe { libc::getuid() };
     if real != me || effective != me {
-        bail!("el proceso {pid} es de otro usuario");
+        bail!(tf!(
+            "el proceso {pid} es de otro usuario",
+            "process {pid} belongs to another user"
+        ));
     }
     let signal = if force { libc::SIGKILL } else { libc::SIGTERM };
     // SAFETY: kill takes plain integers, and `target` has been checked to be one real process.
     if unsafe { libc::kill(target, signal) } != 0 {
         let error = std::io::Error::last_os_error();
-        return Err(error).with_context(|| format!("no se pudo enviar la señal al proceso {pid}"));
+        return Err(error).with_context(|| {
+            tf!(
+                "no se pudo enviar la señal al proceso {pid}",
+                "could not send the signal to process {pid}"
+            )
+        });
     }
     Ok(())
 }

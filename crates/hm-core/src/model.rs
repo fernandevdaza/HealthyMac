@@ -30,11 +30,11 @@ impl Area {
 
     pub fn label(self) -> &'static str {
         match self {
-            Area::System => "Sistema",
+            Area::System => crate::t!("Sistema", "System"),
             Area::Developer => "Developer",
-            Area::LocalAi => "IA local",
+            Area::LocalAi => crate::t!("IA local", "Local AI"),
             Area::Apps => "Apps",
-            Area::Files => "Archivos",
+            Area::Files => crate::t!("Archivos", "Files"),
         }
     }
 }
@@ -54,9 +54,9 @@ pub enum Risk {
 impl Risk {
     pub fn label(self) -> &'static str {
         match self {
-            Risk::Safe => "Seguro",
-            Risk::Moderate => "Moderado",
-            Risk::Review => "Revisar",
+            Risk::Safe => crate::t!("Seguro", "Safe"),
+            Risk::Moderate => crate::t!("Moderado", "Moderate"),
+            Risk::Review => crate::t!("Revisar", "Review"),
         }
     }
 }
@@ -80,11 +80,19 @@ pub enum Recovery {
 impl Recovery {
     pub fn label(self) -> &'static str {
         match self {
-            Recovery::Automatic => "Se regenera solo",
-            Recovery::Rebuild => "Se regenera al compilar",
-            Recovery::Redownload => "Hay que volver a descargarlo",
-            Recovery::None => "Solo recuperable desde la Papelera",
-            Recovery::NothingLost => "No se pierde nada",
+            Recovery::Automatic => crate::t!("Se regenera solo", "Regenerates on its own"),
+            Recovery::Rebuild => {
+                crate::t!("Se regenera al compilar", "Regenerates on the next build")
+            }
+            Recovery::Redownload => crate::t!(
+                "Hay que volver a descargarlo",
+                "Needs to be downloaded again"
+            ),
+            Recovery::None => crate::t!(
+                "Solo recuperable desde la Papelera",
+                "Only recoverable from the Trash"
+            ),
+            Recovery::NothingLost => crate::t!("No se pierde nada", "Nothing is lost"),
         }
     }
 }
@@ -127,11 +135,12 @@ pub struct Finding {
     pub area: Area,
     /// Optional sub-heading inside the scanner's section, e.g. a project name.
     pub group: Option<String>,
-    /// Short name, in Spanish.
+    /// Short name, in the current language.
     pub title: String,
     /// Usually the path.
     pub subtitle: Option<String>,
-    /// One or two sentences, in Spanish: what this is and what happens if it goes away.
+    /// One or two sentences, in the current language: what this is and what happens if it goes
+    /// away.
     pub explanation: String,
     /// On-disk bytes that cleaning this would really release.
     pub size: u64,
@@ -149,6 +158,10 @@ pub struct Finding {
     pub blocked_by: Vec<String>,
     pub tags: Vec<String>,
 }
+
+/// Tag on the report-only finding a scanner emits when it skipped something for lack of Full Disk
+/// Access. Every scanner uses the same one, so the UI can gather them into a single call to action.
+pub const TAG_NEEDS_FULL_DISK_ACCESS: &str = "requiere_acceso_total";
 
 impl Finding {
     /// Starts a finding with conservative defaults: `Review` risk, unrecoverable, not selected and

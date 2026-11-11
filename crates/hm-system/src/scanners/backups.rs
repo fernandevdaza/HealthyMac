@@ -4,7 +4,7 @@ use std::path::Path;
 use std::time::SystemTime;
 
 use anyhow::Result;
-use hm_core::{fsutil, Area, Finding, Recovery, Risk, ScanContext, Scanner};
+use hm_core::{fsutil, t, tf, Area, Finding, Recovery, Risk, ScanContext, Scanner};
 use plist::Value;
 use rayon::prelude::*;
 
@@ -20,10 +20,13 @@ impl Scanner for IosBackups {
         SCANNER_ID
     }
     fn name(&self) -> &'static str {
-        "Copias de seguridad de iOS"
+        t!("Copias de seguridad de iOS", "iOS backups")
     }
     fn description(&self) -> &'static str {
-        "Copias de tu iPhone o iPad guardadas en este Mac."
+        t!(
+            "Copias de tu iPhone o iPad guardadas en este Mac.",
+            "Backups of your iPhone or iPad stored on this Mac."
+        )
     }
     fn area(&self) -> Area {
         Area::Files
@@ -43,9 +46,14 @@ pub(crate) fn scan_backups(ctx: &ScanContext) -> Vec<Finding> {
             vec![gate::missing_access_finding(
                 SCANNER_ID,
                 Area::Files,
-                "macOS no deja leer las copias de seguridad de iPhone y iPad sin el Acceso total al \
-                 disco, y pueden ocupar decenas de GB. Con el permiso, HealthyMac mostrará cuánto \
-                 ocupa cada una y de qué dispositivo es.",
+                t!(
+                    "macOS no deja leer las copias de seguridad de iPhone y iPad sin el Acceso total al \
+                     disco, y pueden ocupar decenas de GB. Con el permiso, HealthyMac mostrará cuánto \
+                     ocupa cada una y de qué dispositivo es.",
+                    "macOS won't let HealthyMac read iPhone and iPad backups without Full Disk \
+                     Access, and they can take up tens of GB. With the permission, HealthyMac will \
+                     show how much each one takes and which device it is from."
+                ),
             )]
         } else {
             Vec::new()
@@ -94,19 +102,22 @@ fn backup_finding(ctx: &ScanContext, path: &Path) -> Option<Finding> {
     let details = read_info(path);
     let id = name_of(path);
     let title = match &details.device {
-        Some(device) => format!("Copia de {device}"),
-        None => "Copia de un dispositivo iOS".to_string(),
+        Some(device) => tf!("Copia de {device}", "Backup of {device}"),
+        None => t!("Copia de un dispositivo iOS", "Backup of an iOS device").to_string(),
     };
     Some(
         Finding::new(SCANNER_ID, Area::Files, &id, title)
             .trash(path)
             .measured(&info)
             .last_used(details.last_backup.or(info.newest_modified))
-            .explanation(
+            .explanation(t!(
                 "Copia de seguridad completa de un iPhone o iPad, con sus fotos, mensajes y datos \
                  de apps. Puede ser la única copia de todo eso si no usas Copia en iCloud, así que \
                  asegúrate antes de quitarla.",
-            )
+                "A full backup of an iPhone or iPad, with its photos, messages and app data. It \
+                 may be the only copy of all that if you don't use iCloud Backup, so make sure \
+                 before you remove it."
+            ))
             .risk(Risk::Review)
             .recovery(Recovery::None)
             .selected(false),

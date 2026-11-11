@@ -5,7 +5,7 @@ use gpui::{
     SharedString, Window,
 };
 use hm_core::fmt::human_size;
-use hm_core::{Finding, RemovalMode, Risk};
+use hm_core::{t, tf, Finding, RemovalMode, Risk};
 
 use super::sheets::{sheet_header, MAX_LISTED, SHEET_WIDTH};
 use super::{fmt_count, plural};
@@ -120,7 +120,7 @@ impl Shell {
                             .items_end()
                             .when(summary.is_lower_bound(), |this| {
                                 this.child(
-                                    div().pb(px(5.)).fs(font::BODY).text_color(theme::text_2()).child("Al menos"),
+                                    div().pb(px(5.)).fs(font::BODY).text_color(theme::text_2()).child(t!("Al menos", "At least")),
                                 )
                             })
                             .child(big_number(human_size(summary.bytes), font::DISPLAY, theme::text_1()))
@@ -129,7 +129,11 @@ impl Shell {
                                     .pb(px(5.))
                                     .fs(font::BODY)
                                     .text_color(theme::text_2())
-                                    .child(plural(summary.count, "elemento", "elementos")),
+                                    .child(plural(
+                                        summary.count,
+                                        t!("elemento", "item"),
+                                        t!("elementos", "items"),
+                                    )),
                             ),
                     )
                     .child(div().w(px(SHEET_WIDTH - 42.0)).child(stack_bar(&segments, 8.0)))
@@ -139,8 +143,9 @@ impl Shell {
                         this.child(note(
                             Icon::Layers,
                             theme::text_3(),
-                            format!(
+                            tf!(
                                 "Otros {} están compartidos con otras carpetas, como la caché de uv o el almacén de pnpm. Esos bloques siguen en el disco, y por eso la cifra es un mínimo.",
+                                "Another {} is shared with other folders, such as the uv cache or the pnpm store. Those blocks stay on disk, which is why the figure is a minimum.",
                                 human_size(summary.shared_bytes)
                             ),
                             false,
@@ -150,9 +155,10 @@ impl Shell {
                         note(
                             Icon::Alert,
                             theme::amber(),
-                            format!(
+                            tf!(
                                 "{process} está abierto, así que {} se omitirá. Ciérralo antes si quieres incluirlo.",
-                                plural(*count, "elemento", "elementos")
+                                "{process} is open, so {} will be skipped unless you quit it first.",
+                                plural(*count, t!("elemento", "item"), t!("elementos", "items"))
                             ),
                             true,
                         )
@@ -161,9 +167,10 @@ impl Shell {
                         this.child(note(
                             Icon::Shield,
                             theme::blue(),
-                            format!(
+                            tf!(
                                 "{} queda fuera de la home de prueba, así que no se tocará.",
-                                plural(outside_test_home, "elemento", "elementos")
+                                "{} outside the test home will not be touched.",
+                                plural(outside_test_home, t!("elemento", "item"), t!("elementos", "items"))
                             ),
                             true,
                         ))
@@ -176,15 +183,20 @@ impl Shell {
                                 .child(toggle(
                                     "include-leftovers",
                                     options.include_leftovers,
-                                    theme::lime(),
+                                    theme::green(),
                                     cx.listener(|this, _, _, cx| this.toggle_uninstall_leftovers(cx)),
                                 ))
                                 .child(
                                     div()
                                         .fs(font::BODY)
-                                        .child(format!(
+                                        .child(tf!(
                                             "Incluir también sus restos ({}, {})",
-                                            plural(options.app.leftovers.len(), "carpeta", "carpetas"),
+                                            "Also include its leftovers ({}, {})",
+                                            plural(
+                                                options.app.leftovers.len(),
+                                                t!("carpeta", "folder"),
+                                                t!("carpetas", "folders")
+                                            ),
                                             human_size(leftovers)
                                         )),
                                 ),
@@ -212,9 +224,10 @@ impl Shell {
                         .py(sp(2.5))
                         .fs(font::CAPTION)
                         .text_color(theme::text_2())
-                        .child(format!(
+                        .child(tf!(
                             "Y {} más, con {}. Los has elegido en las páginas de cada área.",
-                            plural(hidden, "elemento", "elementos"),
+                            "Plus {} ({}) not listed here. You picked them on each area's page.",
+                            plural(hidden, t!("elemento", "item"), t!("elementos", "items")),
                             human_size(hidden_bytes)
                         )),
                 )
@@ -224,7 +237,14 @@ impl Shell {
             .relative()
             .flex_shrink()
             .min_h(px(0.))
-            .child(sheet_header(&review.title, "Nada se toca hasta que confirmes.", cx))
+            .child(sheet_header(
+                &review.title,
+                t!(
+                    "Nada se toca hasta que confirmes.",
+                    "Nothing is touched until you confirm."
+                ),
+                cx,
+            ))
             .when(simulated, |this| {
                 this.child(
                     row()
@@ -244,7 +264,7 @@ impl Shell {
                                 .fs(font::CAPTION)
                                 .font_weight(gpui::FontWeight::SEMIBOLD)
                                 .text_color(theme::amber())
-                                .child("SIMULACIÓN"),
+                                .child(t!("SIMULACIÓN", "SIMULATION")),
                         )
                         .child(
                             div()
@@ -252,7 +272,10 @@ impl Shell {
                                 .min_w(px(0.))
                                 .fs(font::CAPTION)
                                 .text_color(theme::text_2())
-                                .child("Verás lo que pasaría, pero no se va a borrar nada."),
+                                .child(t!(
+                                    "Verás lo que pasaría, pero no se va a borrar nada.",
+                                    "You'll see what would happen, but nothing will be deleted."
+                                )),
                         ),
                 )
             })
@@ -283,7 +306,6 @@ impl Shell {
                                 .child(checkbox(
                                     "review-ack",
                                     if review.acknowledged { GroupState::All } else { GroupState::None },
-                                    theme::rose(),
                                     cx.listener(|this, _, _, cx| this.toggle_acknowledged(cx)),
                                 ))
                                 .child(
@@ -296,9 +318,16 @@ impl Shell {
                                         .child(if let Some(text) = &review.acknowledgement {
                                             text.clone()
                                         } else if review_count == 1 {
-                                            "Lo he mirado. Entiendo que lo marcado «Revisar» puede contener algo que me importa.".to_string()
+                                            t!(
+                                                "Lo he mirado. Entiendo que lo marcado «Revisar» puede contener algo que me importa.",
+                                                "I've looked. I understand that what's marked “Review” may contain something I care about."
+                                            )
+                                            .to_string()
                                         } else {
-                                            format!("Lo he mirado. Entiendo que estos {review_count} elementos marcados «Revisar» pueden contener cosas que me importan.")
+                                            tf!(
+                                                "Lo he mirado. Entiendo que estos {review_count} elementos marcados «Revisar» pueden contener cosas que me importan.",
+                                                "I've looked. I understand that these {review_count} items marked “Review” may contain things I care about."
+                                            )
                                         }),
                                 ),
                         )
@@ -307,23 +336,23 @@ impl Shell {
                         row()
                             .justify_end()
                             .gap(sp(2.))
-                            .child(Btn::ghost("Cancelar").build(
+                            .child(Btn::ghost(t!("Cancelar", "Cancel")).build(
                                 "review-cancel",
                                 cx.listener(|this, _, _, cx| this.close_sheet(cx)),
                             ))
                             .child(
-                                Btn::primary(
-                                    if simulated {
-                                        "Simular".to_string()
+                                {
+                                    let label = if simulated {
+                                        t!("Simular", "Simulate").to_string()
                                     } else {
                                         format!("{} {}", review.confirm_label, summary.total_label())
-                                    },
+                                    };
                                     if needs_ack {
-                                        (theme::hex(0xFDA4AF), theme::rose())
+                                        Btn::destructive(label)
                                     } else {
-                                        theme::brand_stops()
-                                    },
-                                )
+                                        Btn::primary(label)
+                                    }
+                                }
                                 .disabled(!can_confirm)
                                 .build(
                                     "review-confirm",
@@ -356,30 +385,48 @@ fn destination_lines(items: &[Finding], mode: RemovalMode) -> Vec<AnyElement> {
             let (which, color, text): (Icon, Hsla, String) = match kind {
                 Destination::Trash => (
                     Icon::Trash,
-                    theme::amber(),
-                    format!("{size} irán a la Papelera. Podrás recuperarlos, pero el espacio no se libera hasta que la vacíes."),
+                    theme::text_2(),
+                    tf!(
+                        "{size} irán a la Papelera. Podrás recuperarlos, pero el espacio no se libera hasta que la vacíes.",
+                        "{size} will go to the Trash. You can get it back, but the space isn't freed until you empty it."
+                    ),
                 ),
                 Destination::Deleted => (
                     Icon::Bolt,
-                    theme::teal(),
-                    format!("{size} se borran al momento, porque se regeneran solos."),
+                    theme::amber(),
+                    tf!(
+                        "{size} se borran al momento, porque se regeneran solos.",
+                        "{size} is deleted right away, because it regenerates on its own."
+                    ),
                 ),
                 Destination::Tool => (
                     Icon::Code,
-                    theme::violet(),
-                    format!("{size} los limpia la propia herramienta con su comando. Esa cifra es una estimación."),
+                    theme::text_2(),
+                    tf!(
+                        "{size} los limpia la propia herramienta con su comando. Esa cifra es una estimación.",
+                        "{size} is cleaned by the tool itself, with its own command. That figure is an estimate."
+                    ),
                 ),
                 Destination::Clone => (
                     Icon::Copy,
                     theme::green(),
-                    format!("{size} se liberan cambiando copias por clones APFS. Todo sigue en su sitio: no se pierde nada."),
+                    tf!(
+                        "{size} se liberan cambiando copias por clones APFS. Todo sigue en su sitio: no se pierde nada.",
+                        "{size} is freed by swapping copies for APFS clones. Everything stays in place: nothing is lost."
+                    ),
                 ),
                 Destination::EmptyTrash => (
                     Icon::Alert,
                     theme::rose(),
-                    "Borrado definitivo de todo lo que hay en la Papelera. Esto no se puede deshacer.".to_string(),
+                    t!(
+                        "Borrado definitivo de todo lo que hay en la Papelera. Esto no se puede deshacer.",
+                        "Permanently deletes everything in the Trash. This can't be undone."
+                    )
+                    .to_string(),
                 ),
-                Destination::Nothing => (Icon::Info, theme::text_3(), "Sin efecto.".to_string()),
+                Destination::Nothing => {
+                    (Icon::Info, theme::text_3(), t!("Sin efecto.", "No effect.").to_string())
+                }
             };
             row()
                 .gap(sp(2.))

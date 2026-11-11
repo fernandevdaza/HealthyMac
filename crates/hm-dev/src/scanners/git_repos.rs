@@ -2,7 +2,7 @@
 
 use anyhow::Result;
 use hm_core::fmt::human_size;
-use hm_core::{Action, Area, Finding, Recovery, Risk, ScanContext, Scanner};
+use hm_core::{t, tf, Action, Area, Finding, Recovery, Risk, ScanContext, Scanner};
 use rayon::prelude::*;
 
 use crate::sweep::{shared_sweep, SweptProject};
@@ -22,11 +22,14 @@ impl Scanner for LargeGitScanner {
     }
 
     fn name(&self) -> &'static str {
-        "Repositorios Git grandes"
+        t!("Repositorios Git grandes", "Large Git repositories")
     }
 
     fn description(&self) -> &'static str {
-        "Repositorios cuya carpeta .git ha crecido y puede compactarse con git gc."
+        t!(
+            "Repositorios cuya carpeta .git ha crecido y puede compactarse con git gc.",
+            "Repositories whose .git folder has grown and can be compacted with git gc."
+        )
     }
 
     fn area(&self) -> Area {
@@ -94,7 +97,11 @@ fn finding_for(project: &SweptProject, objects: Option<ObjectCounts>) -> Option<
         ID,
         Area::Developer,
         project.path.display().to_string(),
-        format!("Repositorio Git de {}", human_size(total)),
+        tf!(
+            "Repositorio Git de {}",
+            "{} Git repository",
+            human_size(total)
+        ),
     )
     .group(project.display.clone())
     .subtitle(project.path.display().to_string())
@@ -102,29 +109,33 @@ fn finding_for(project: &SweptProject, objects: Option<ObjectCounts>) -> Option<
     .recovery(Recovery::Automatic);
 
     let Some(objects) = objects else {
-        return Some(base.explanation(
+        return Some(base.explanation(t!(
             "La carpeta .git es grande, pero Git no pudo informar de cuánto se podría recuperar, así que no se ofrece compactarla.",
-        ));
+            "The .git folder is large, but Git couldn't report how much could be reclaimed, so compacting it is not offered."
+        )));
     };
     let reclaimable = objects.loose_bytes.saturating_add(objects.garbage_bytes);
     if reclaimable < WORTH_COMPACTING && objects.packs < FRAGMENTED_PACKS {
-        return Some(base.explanation(format!(
+        return Some(base.explanation(tf!(
             "Ya está compactado: {} de sus datos están en {}, así que git gc liberaría muy poco. Su tamaño se debe a su historial.",
+            "It is already compacted: {} of its data is in {}, so git gc would free very little. Its size comes from its history.",
             human_size(objects.pack_bytes),
-            util::count(objects.packs, "paquete", "paquetes"),
+            util::count(objects.packs, t!("paquete", "pack"), t!("paquetes", "packs")),
         )));
     }
     let Some(path) = project.path.to_str() else {
-        return Some(base.explanation(
+        return Some(base.explanation(t!(
             "Se podría compactar con git gc, pero la ruta tiene caracteres que HealthyMac no puede pasarle a Git.",
-        ));
+            "It could be compacted with git gc, but the path has characters HealthyMac can't pass to Git."
+        )));
     };
     Some(
         base.size(reclaimable)
-            .explanation(format!(
+            .explanation(tf!(
                 "Tiene {} sueltos o sobrantes y {} de Git, que git gc puede compactar. Lo indicado es una estimación: puede liberar algo menos, o más si hay mucha fragmentación. Tus commits y ramas no cambian; solo desaparecen objetos inalcanzables antiguos, los que ya no aparecen ni en el reflog. Puede tardar varios minutos en un repositorio grande.",
+                "It has {} of loose or leftover objects and {} of Git data, which git gc can compact. The figure shown is an estimate: it may free a little less, or more if there is a lot of fragmentation. Your commits and branches don't change; only old unreachable objects go, the ones no longer even in the reflog. It can take several minutes on a large repository.",
                 human_size(reclaimable),
-                util::count(objects.packs, "paquete", "paquetes"),
+                util::count(objects.packs, t!("paquete", "pack"), t!("paquetes", "packs")),
             ))
             .action(Action::Command {
                 program: "git".to_string(),

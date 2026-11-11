@@ -1,7 +1,7 @@
 //! Large files in the user's home.
 
 use anyhow::Result;
-use hm_core::{Area, Finding, Recovery, Risk, ScanContext, Scanner};
+use hm_core::{t, Area, Finding, Recovery, Risk, ScanContext, Scanner};
 
 use super::walk;
 use crate::gate;
@@ -15,10 +15,13 @@ impl Scanner for LargeFiles {
         SCANNER_ID
     }
     fn name(&self) -> &'static str {
-        "Archivos grandes"
+        t!("Archivos grandes", "Large files")
     }
     fn description(&self) -> &'static str {
-        "Los archivos que más ocupan en tu carpeta de usuario."
+        t!(
+            "Los archivos que más ocupan en tu carpeta de usuario.",
+            "The files that take up the most space in your home folder."
+        )
     }
     fn area(&self) -> Area {
         Area::Files
@@ -46,15 +49,19 @@ pub(crate) fn scan_large(ctx: &ScanContext) -> Vec<Finding> {
                 .and_then(|relative| relative.components().next())
                 .map(|top| top.as_os_str().to_string_lossy().into_owned());
             let shared = file.on_disk.saturating_sub(file.reclaimable);
-            let mut explanation = String::from(
+            let mut explanation = String::from(t!(
                 "Ocupa mucho, pero solo tú sabes si lo necesitas. Si ya no te hace falta, irá a la \
                  Papelera y podrás recuperarlo hasta que la vacíes.",
-            );
+                "It takes up a lot of space, but only you know if you need it. If you don't, it \
+                 goes to the Trash and you can get it back until you empty it."
+            ));
             if shared > file.reclaimable {
-                explanation.push_str(
+                explanation.push_str(t!(
                     " Comparte casi todo su espacio con otra copia, así que quitarlo solo liberará \
                      lo que no comparte.",
-                );
+                    " It shares almost all of its space with another copy, so removing it only \
+                     frees what it does not share."
+                ));
             }
             let mut finding = Finding::new(
                 SCANNER_ID,
@@ -82,9 +89,14 @@ pub(crate) fn scan_large(ctx: &ScanContext) -> Vec<Finding> {
         findings.push(gate::missing_access_finding(
             SCANNER_ID,
             Area::Files,
-            "Sin el Acceso total al disco no se revisan Documentos, Escritorio, Descargas ni Música, \
-             para no llenarte la pantalla de avisos de permisos. Con el permiso, HealthyMac también \
-             encontrará los archivos grandes que tengas ahí.",
+            t!(
+                "Sin el Acceso total al disco no se revisan Documentos, Escritorio, Descargas ni Música, \
+                 para no llenarte la pantalla de avisos de permisos. Con el permiso, HealthyMac también \
+                 encontrará los archivos grandes que tengas ahí.",
+                "Without Full Disk Access, Documents, Desktop, Downloads and Music are not checked, \
+                 so your screen doesn't fill up with permission prompts. With the permission, \
+                 HealthyMac will also find the large files you have there."
+            ),
         ));
     }
     findings

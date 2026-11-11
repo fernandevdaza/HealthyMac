@@ -5,7 +5,7 @@ use gpui::{
     SharedString, StyledImage, Window,
 };
 use hm_core::fmt::{human_age, human_size};
-use hm_core::Area;
+use hm_core::{t, tf, Area};
 use hm_system::types::AppArch;
 
 use super::{content_width, gutter_row, plural};
@@ -13,7 +13,7 @@ use crate::assets::Icon;
 use crate::state::{AppSort, AppsTab, Shell};
 use crate::theme::{self, font, radius, sp, GUTTER};
 use crate::ui::chrome::{empty_state, notice, page_header, NoticeKind};
-use crate::ui::controls::{dot, pill, segmented, tag, Btn, BtnSize};
+use crate::ui::controls::{dot, pill, segmented, tag, Btn, ROW_GROUP};
 use crate::ui::scrollbar::{scrollbar, ScrollSource};
 use crate::ui::{clip, col, row, TextExt};
 
@@ -27,11 +27,15 @@ impl Shell {
             .filter(|finding| finding.area == Area::Apps)
             .count();
         let tab_labels: Vec<SharedString> = vec![
-            "Instaladas".into(),
+            t!("Instaladas", "Installed").into(),
             if leftovers_count > 0 {
-                format!("Restos ({leftovers_count})").into()
+                tf!(
+                    "Restos ({leftovers_count})",
+                    "Leftovers ({leftovers_count})"
+                )
+                .into()
             } else {
-                "Restos".into()
+                t!("Restos", "Leftovers").into()
             },
         ];
         let tab = usize::from(self.apps.tab == AppsTab::Leftovers);
@@ -52,19 +56,31 @@ impl Shell {
 
         let count = self.apps.apps.data.as_ref().map_or(0, Vec::len);
         let subtitle = if self.apps.tab == AppsTab::Leftovers {
-            "Lo que dejaron atrás las apps que ya no tienes.".to_string()
+            t!(
+                "Lo que dejaron atrás las apps que ya no tienes.",
+                "What apps you no longer have left behind."
+            )
+            .to_string()
         } else if self.apps.apps.data.is_some() {
-            format!(
+            tf!(
                 "{} en este Mac. Desinstalar también se lleva sus restos.",
+                "{} on this Mac. Uninstalling also removes their leftovers.",
                 plural(count, "app", "apps")
             )
         } else {
-            "Las apps de este Mac y lo que pesan de verdad, con sus restos.".to_string()
+            t!(
+                "Las apps de este Mac y lo que pesan de verdad, con sus restos.",
+                "The apps on this Mac and their real size, leftovers included."
+            )
+            .to_string()
         };
         let mut actions = vec![tabs];
         if self.apps.tab == AppsTab::Installed && self.apps.apps.data.is_some() {
-            let sort_labels: Vec<SharedString> =
-                vec!["Tamaño".into(), "Último uso".into(), "Nombre".into()];
+            let sort_labels: Vec<SharedString> = vec![
+                t!("Tamaño", "Size").into(),
+                t!("Último uso", "Last used").into(),
+                t!("Nombre", "Name").into(),
+            ];
             let selected = match self.apps.sort {
                 AppSort::Size => 0,
                 AppSort::LastUsed => 1,
@@ -97,7 +113,10 @@ impl Shell {
                 .px(px(GUTTER))
                 .child(notice(
                     NoticeKind::Error,
-                    "No hemos podido leer tus apps",
+                    t!(
+                        "No hemos podido leer tus apps",
+                        "We couldn't read your apps"
+                    ),
                     Some(error.clone().into()),
                     None,
                 ))
@@ -105,18 +124,24 @@ impl Shell {
         } else if self.apps.apps.data.is_none() {
             empty_state(
                 Icon::Grid,
-                theme::area_color(Area::Apps),
-                "Pesando tus apps",
-                "Medimos cada app y buscamos lo que tiene repartido por la Biblioteca. Puede tardar un poco.",
+                theme::text_2(),
+                t!("Pesando tus apps", "Measuring your apps"),
+                t!(
+                    "Medimos cada app y buscamos lo que tiene repartido por la Biblioteca. Puede tardar un poco.",
+                    "We measure each app and look for what it has spread across the Library. This can take a little while."
+                ),
                 None,
             )
             .into_any_element()
         } else if count == 0 {
             empty_state(
                 Icon::Grid,
-                theme::area_color(Area::Apps),
-                "No hemos encontrado apps",
-                "Qué raro. Si tus apps están fuera de /Applications, no las vemos.",
+                theme::text_2(),
+                t!("No hemos encontrado apps", "We found no apps"),
+                t!(
+                    "Qué raro. Si tus apps están fuera de /Applications, no las vemos.",
+                    "That's odd. If your apps are outside /Applications, we can't see them."
+                ),
                 None,
             )
             .into_any_element()
@@ -138,11 +163,11 @@ impl Shell {
                         .fs(font::MICRO)
                         .text_color(theme::text_3())
                         .child(div().flex_1().min_w(px(0.)).child("App"))
-                        .child(div().w(px(116.)).child("Arquitectura"))
+                        .child(div().w(px(116.)).child(t!("Arquitectura", "Architecture")))
                         .when(wide, |this| {
-                            this.child(div().w(px(92.)).child("Último uso"))
+                            this.child(div().w(px(92.)).child(t!("Último uso", "Last used")))
                         })
-                        .child(div().w(px(110.)).text_right().child("Tamaño"))
+                        .child(div().w(px(110.)).text_right().child(t!("Tamaño", "Size")))
                         .child(div().w(px(94.))),
                 )
                 .child(
@@ -208,6 +233,7 @@ impl Shell {
             .child(
                 row()
                     .id(ElementId::NamedInteger("app".into(), index as u64))
+                    .group(ROW_GROUP)
                     .h(px(ROW_HEIGHT))
                     .w_full()
                     .px(sp(2.))
@@ -255,14 +281,16 @@ impl Shell {
                                                 .fs(font::MICRO)
                                                 .text_color(theme::green())
                                                 .child(dot(theme::green(), 6.0))
-                                                .child("Abierta"),
+                                                .child(t!("Abierta", "Open")),
                                         )
                                     }),
                             )
                             .child(clip().fs(font::MICRO).text_color(theme::text_3()).child(
                                 match (&app.uninstall_blocked, &app.version) {
                                     (Some(reason), _) if !app.is_system => reason.clone(),
-                                    (_, Some(version)) => format!("Versión {version}"),
+                                    (_, Some(version)) => {
+                                        tf!("Versión {version}", "Version {version}")
+                                    }
                                     _ => String::new(),
                                 },
                             )),
@@ -305,18 +333,21 @@ impl Shell {
                                         .fs(font::MICRO)
                                         .tabular()
                                         .text_color(theme::text_3())
-                                        .child(format!("{} de restos", human_size(leftovers))),
+                                        .child(tf!(
+                                            "{} de restos",
+                                            "{} of leftovers",
+                                            human_size(leftovers)
+                                        )),
                                 )
                             }),
                     )
                     .child(div().flex_none().w(px(94.)).flex().justify_end().child(
                         if app.is_system {
-                            tag("Del sistema").into_any_element()
+                            tag(t!("Del sistema", "System")).into_any_element()
                         } else if app.uninstall_blocked.is_some() {
-                            tag("No se puede").into_any_element()
+                            tag(t!("No se puede", "Blocked")).into_any_element()
                         } else {
-                            Btn::ghost("Desinstalar")
-                                .size(BtnSize::Sm)
+                            Btn::row_danger(t!("Desinstalar", "Uninstall"))
                                 .build(
                                     ElementId::NamedInteger("app-uninstall".into(), index as u64),
                                     cx.listener(move |this, _, _, cx| {

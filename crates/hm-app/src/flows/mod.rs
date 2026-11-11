@@ -1,6 +1,8 @@
 //! What happens when the user does something: background work and the state it reports back to.
 
+pub mod appearance;
 pub mod clean;
+pub mod language;
 pub mod live;
 pub mod load;
 pub mod scan;
@@ -8,6 +10,7 @@ pub mod scan;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
 use gpui::Context;
+use hm_core::t;
 
 use crate::state::Shell;
 
@@ -29,7 +32,13 @@ impl Shell {
                     .downcast_ref::<&str>()
                     .map(|text| text.to_string())
                     .or_else(|| payload.downcast_ref::<String>().cloned())
-                    .unwrap_or_else(|| "fallo interno sin mensaje".to_string())),
+                    .unwrap_or_else(|| {
+                        t!(
+                            "fallo interno sin mensaje",
+                            "internal failure with no message"
+                        )
+                        .to_string()
+                    })),
             };
             let _ = tx.send(result);
         });
@@ -55,7 +64,7 @@ impl Shell {
         cx.notify();
         cx.spawn(async move |this, cx| {
             cx.background_executor()
-                .timer(std::time::Duration::from_secs(4))
+                .timer(std::time::Duration::from_millis(crate::pages::TOAST_MS))
                 .await;
             this.update(cx, |shell, cx| {
                 if shell

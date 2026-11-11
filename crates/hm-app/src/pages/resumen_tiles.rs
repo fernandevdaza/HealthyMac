@@ -1,15 +1,15 @@
-//! The dashboard's lower half: a tile per area, and every scanner's progress while one runs.
+//! The dashboard's storage list, a row per area under the disk bar, and every scanner's progress
+//! while one runs.
 
-use gpui::{div, prelude::*, px, relative, AnyElement, Context, SharedString};
+use gpui::{div, prelude::*, px, AnyElement, Context, FontWeight, SharedString};
 use hm_core::fmt::human_size;
-use hm_core::Area;
+use hm_core::{t, tf, Area};
 
 use super::resumen::section_title_row;
 use crate::assets::Icon;
 use crate::logic::selection::is_actionable;
 use crate::state::{AppsTab, Page, ScannerStatus, Shell};
 use crate::theme::{self, font, radius, sp};
-use crate::ui::chrome::big_number;
 use crate::ui::controls::{dot, spinner};
 use crate::ui::{clip, col, icon, row, TextExt};
 
@@ -23,8 +23,45 @@ pub const AREAS: [Area; 5] = [
 ];
 
 impl Shell {
-    pub(super) fn area_tile(&self, area: Area, cx: &mut Context<Self>) -> impl IntoElement {
-        let accent = theme::area_color(area);
+    /// The disk's breakdown as a list, the way System Settings > Storage shows it: a row per area,
+    /// keyed to the bar above by its colour, then what else is in use and what is free. It replaces
+    /// both the bar's legend and the old tiles, which showed the same numbers twice.
+    ///
+    /// `rest` is the "everything else" label and size, plus free space, when the disk is known.
+    pub(super) fn storage_list(
+        &self,
+        rest: Option<(&'static str, u64, u64)>,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let mut rows: Vec<AnyElement> = AREAS
+            .iter()
+            .map(|&area| self.storage_row(area, cx).into_any_element())
+            .collect();
+        if let Some((label, other, free)) = rest {
+            rows.push(plain_row(theme::surface_4(), label, human_size(other)));
+            rows.push(plain_row(
+                theme::surface_2(),
+                t!("Libre", "Free"),
+                human_size(free),
+            ));
+        }
+        let count = rows.len();
+        col()
+            .w_full()
+            .rounded(px(radius::MD))
+            .border_1()
+            .border_color(theme::hairline())
+            .overflow_hidden()
+            .children(rows.into_iter().enumerate().map(|(index, row_el)| {
+                div()
+                    .when(index + 1 < count, |this| {
+                        this.border_b_1().border_color(theme::hairline())
+                    })
+                    .child(row_el)
+            }))
+    }
+
+    fn storage_row(&self, area: Area, cx: &mut Context<Self>) -> impl IntoElement {
         let scanned = self.scan.finished_once;
         let members: Vec<_> = self
             .findings
@@ -33,30 +70,14 @@ impl Shell {
             .collect();
         let total: u64 = members.iter().map(|f| f.size).fold(0, u64::saturating_add);
         let selected = self.selection.summarize(members.iter().copied());
-        let which = match area {
-            Area::System => Icon::Sparkle,
-            Area::Developer => Icon::Code,
-            Area::LocalAi => Icon::Nodes,
-            Area::Apps => Icon::Grid,
-            Area::Files => Icon::File,
-        };
-        col()
-            .id(SharedString::from(format!("tile-{area:?}")))
-            .flex_1()
-            .min_w(px(0.))
-            .gap(sp(2.5))
-            .p(sp(3.5))
-            .rounded(px(radius::LG))
-            .bg(theme::surface_1())
-            .border_1()
-            .border_color(theme::hairline())
+        row()
+            .id(SharedString::from(format!("storage-{area:?}")))
+            .h(px(54.))
+            .px(sp(3.5))
+            .gap(sp(3.))
             .cursor_pointer()
-            .hover(|style| {
-                style
-                    .bg(theme::surface_2())
-                    .border_color(theme::hairline_strong())
-            })
-            .active(|style| style.opacity(0.8))
+            .hover(|style| style.bg(theme::surface_1()))
+            .active(|style| style.bg(theme::surface_2()))
             .on_click(cx.listener(move |this, _, _, cx| {
                 if area == Area::Apps {
                     this.apps.tab = AppsTab::Leftovers;
@@ -65,70 +86,61 @@ impl Shell {
                     this.navigate(Page::Area(area), cx);
                 }
             }))
+            .child(dot(theme::area_color(area), 9.0))
             .child(
-                row().gap(px(7.)).child(icon(which, 15.0, accent)).child(
-                    clip()
-                        .fs(font::CAPTION)
-                        .text_color(theme::text_2())
-                        .child(area.label()),
-                ),
+                col()
+                    .flex_1()
+                    .min_w(px(0.))
+                    .child(
+                        div()
+                            .fs(font::BODY)
+                            .font_weight(FontWeight::MEDIUM)
+                            .child(area.label()),
+                    )
+                    .child(
+                        clip()
+                            .fs(font::CAPTION)
+                            .text_color(theme::text_3())
+                            .child(tile_blurb(area)),
+                    ),
             )
-            .when(!scanned, |this| {
-                this.child(
-                    div()
-                        .fs(font::CAPTION)
-                        .text_color(theme::text_3())
-                        .child(tile_blurb(area)),
-                )
-            })
             .when(scanned, |this| {
                 this.child(
                     col()
-                        .gap(sp(0.5))
-                        .child(big_number(
-                            if total == 0 {
-                                "Nada".to_string()
-                            } else {
-                                human_size(total)
-                            },
-                            font::HEADLINE + 2.0,
-                            if total == 0 {
-                                theme::text_3()
-                            } else {
-                                theme::text_1()
-                            },
-                        ))
+                        .flex_none()
+                        .items_end()
                         .child(
-                            clip()
+                            div()
+                                .fs(font::BODY)
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .tabular()
+                                .text_color(if total == 0 {
+                                    theme::text_3()
+                                } else {
+                                    theme::text_1()
+                                })
+                                .child(if total == 0 {
+                                    t!("Nada", "Nothing").to_string()
+                                } else {
+                                    human_size(total)
+                                }),
+                        )
+                        .child(
+                            div()
                                 .fs(font::MICRO)
                                 .tabular()
                                 .text_color(theme::text_3())
                                 .child(if total == 0 {
-                                    "Todo limpio".to_string()
+                                    t!("Todo limpio", "All clean").to_string()
                                 } else if selected.count > 0 {
-                                    format!("{} elegidos", selected.total_label())
+                                    tf!("{} elegidos", "{} selected", selected.total_label())
                                 } else {
-                                    "Sin elegir".to_string()
+                                    t!("Sin elegir", "None selected").to_string()
                                 }),
                         ),
                 )
-                .child(
-                    div()
-                        .h(px(3.))
-                        .w_full()
-                        .rounded(px(2.))
-                        .bg(theme::surface_2())
-                        .when(total > 0 && selected.bytes > 0, |this| {
-                            this.child(
-                                div()
-                                    .h_full()
-                                    .w(relative((selected.bytes as f32 / total as f32).min(1.0)))
-                                    .rounded(px(2.))
-                                    .bg(accent),
-                            )
-                        }),
-                )
             })
+            .child(icon(Icon::ChevronRight, 13.0, theme::text_3()))
     }
 
     /// Every scanner and what it is doing right now, by area.
@@ -139,16 +151,19 @@ impl Shell {
         col()
             .gap(sp(3.))
             .child(section_title_row(if self.scan.running {
-                "Revisando tu Mac"
+                t!("Revisando tu Mac", "Checking your Mac")
             } else {
-                "Lo que dio tiempo a revisar"
+                t!(
+                    "Lo que dio tiempo a revisar",
+                    "What it checked before stopping"
+                )
             }))
             .when(total > 0 && done == total && self.scan.running, |this| {
                 this.child(
                     div()
                         .fs(font::CAPTION)
                         .text_color(theme::text_2())
-                        .child("Atando cabos…"),
+                        .child(t!("Atando cabos…", "Putting it all together…")),
                 )
             })
             .child(
@@ -165,7 +180,7 @@ impl Shell {
                             .get(meta.id)
                             .cloned()
                             .unwrap_or(ScannerStatus::Waiting);
-                        scanner_line(meta.id, meta.name, meta.area, status)
+                        scanner_line(meta.id, meta.name, status)
                     })),
             )
     }
@@ -173,37 +188,45 @@ impl Shell {
 
 fn tile_blurb(area: Area) -> &'static str {
     match area {
-        Area::System => "Cachés, registros y restos del sistema",
-        Area::Developer => "Compilaciones, dependencias y Docker",
-        Area::LocalAi => "Modelos repetidos y cachés de IA",
-        Area::Apps => "Restos de apps que ya no tienes",
-        Area::Files => "Archivos grandes y descargas viejas",
+        Area::System => t!(
+            "Cachés, registros y restos del sistema",
+            "Caches, logs and system leftovers"
+        ),
+        Area::Developer => t!(
+            "Compilaciones, dependencias y Docker",
+            "Builds, dependencies and Docker"
+        ),
+        Area::LocalAi => t!(
+            "Modelos repetidos y cachés de IA",
+            "Duplicate models and AI caches"
+        ),
+        Area::Apps => t!(
+            "Restos de apps que ya no tienes",
+            "Leftovers from apps you removed"
+        ),
+        Area::Files => t!(
+            "Archivos grandes y descargas viejas",
+            "Large files and old downloads"
+        ),
     }
 }
 
-fn scanner_line(
-    id: &'static str,
-    name: &'static str,
-    area: Area,
-    status: ScannerStatus,
-) -> impl IntoElement {
+fn scanner_line(id: &'static str, name: &'static str, status: ScannerStatus) -> impl IntoElement {
     let status_icon: AnyElement = match &status {
         ScannerStatus::Waiting => dot(theme::surface_4(), 6.0).mx(sp(1.)).into_any_element(),
         ScannerStatus::Running => spinner(
             SharedString::from(format!("spin-{id}")),
             14.0,
-            theme::area_color(area),
+            theme::text_2(),
         )
         .into_any_element(),
-        ScannerStatus::Done { .. } => {
-            icon(Icon::Check, 14.0, theme::area_color(area)).into_any_element()
-        }
+        ScannerStatus::Done { .. } => icon(Icon::Check, 14.0, theme::text_2()).into_any_element(),
         ScannerStatus::Failed(_) => icon(Icon::Alert, 14.0, theme::amber()).into_any_element(),
     };
     let trailing = match &status {
         ScannerStatus::Done { bytes, .. } if *bytes > 0 => human_size(*bytes),
-        ScannerStatus::Done { .. } => "Nada".to_string(),
-        ScannerStatus::Failed(_) => "Falló".to_string(),
+        ScannerStatus::Done { .. } => t!("Nada", "Nothing").to_string(),
+        ScannerStatus::Failed(_) => t!("Falló", "Failed").to_string(),
         _ => String::new(),
     };
     let waiting = matches!(status, ScannerStatus::Waiting);
@@ -231,4 +254,38 @@ fn scanner_line(
                 .text_color(theme::text_2())
                 .child(trailing),
         )
+}
+
+/// A row with nothing behind it to open: what else is in use, and free space.
+fn plain_row(color: gpui::Hsla, label: &'static str, value: String) -> AnyElement {
+    row()
+        .h(px(40.))
+        .px(sp(3.5))
+        .gap(sp(3.))
+        .child(
+            div()
+                .flex_none()
+                .size(px(9.))
+                .rounded_full()
+                .bg(color)
+                .border_1()
+                .border_color(theme::hairline_strong()),
+        )
+        .child(
+            div()
+                .flex_1()
+                .fs(font::BODY)
+                .text_color(theme::text_2())
+                .child(label),
+        )
+        .child(
+            div()
+                .flex_none()
+                .mr(px(25.))
+                .fs(font::BODY)
+                .tabular()
+                .text_color(theme::text_2())
+                .child(value),
+        )
+        .into_any_element()
 }

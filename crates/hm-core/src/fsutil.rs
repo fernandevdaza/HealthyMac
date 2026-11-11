@@ -248,8 +248,8 @@ pub fn has_full_disk_access(home: &Path) -> bool {
 
 /// SHA-256 of a file as lowercase hex. Returns an error if cancelled.
 pub fn sha256_file(path: &Path, cancel: &CancelToken) -> Result<String> {
-    let mut file =
-        File::open(path).with_context(|| format!("no se pudo abrir {}", path.display()))?;
+    let mut file = File::open(path)
+        .with_context(|| crate::tf!("no se pudo abrir {}", "could not open {}", path.display()))?;
     let mut hasher = Sha256::new();
     let mut buffer = vec![0u8; 1024 * 1024];
     loop {

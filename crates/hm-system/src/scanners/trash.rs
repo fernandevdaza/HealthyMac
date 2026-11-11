@@ -1,7 +1,7 @@
 //! The user's Trash.
 
 use anyhow::Result;
-use hm_core::{Action, Area, Finding, Recovery, Risk, ScanContext, Scanner};
+use hm_core::{t, Action, Area, Finding, Recovery, Risk, ScanContext, Scanner};
 
 use crate::gate::{self, name_of, DirListing};
 
@@ -14,10 +14,13 @@ impl Scanner for Trash {
         SCANNER_ID
     }
     fn name(&self) -> &'static str {
-        "Papelera"
+        t!("Papelera", "Trash")
     }
     fn description(&self) -> &'static str {
-        "Lo que ya tiraste sigue ocupando espacio hasta que vacías la Papelera."
+        t!(
+            "Lo que ya tiraste sigue ocupando espacio hasta que vacías la Papelera.",
+            "What you threw away still takes up space until you empty the Trash."
+        )
     }
     fn area(&self) -> Area {
         Area::System
@@ -37,9 +40,14 @@ pub(crate) fn scan_trash(ctx: &ScanContext) -> Vec<Finding> {
             return vec![gate::missing_access_finding(
                 SCANNER_ID,
                 Area::System,
-                "macOS no deja leer la Papelera sin el Acceso total al disco, así que no se sabe \
-                 cuánto ocupa: no significa que esté vacía. Con el permiso, HealthyMac puede \
-                 medirla y vaciarla desde aquí.",
+                t!(
+                    "macOS no deja leer la Papelera sin el Acceso total al disco, así que no se sabe \
+                     cuánto ocupa: no significa que esté vacía. Con el permiso, HealthyMac puede \
+                     medirla y vaciarla desde aquí.",
+                    "macOS won't let HealthyMac read the Trash without Full Disk Access, so its \
+                     size is unknown. That does not mean it is empty. With the permission, \
+                     HealthyMac can measure it and empty it from here."
+                ),
             )];
         }
         DirListing::Entries(entries) => entries,
@@ -54,23 +62,31 @@ pub(crate) fn scan_trash(ctx: &ScanContext) -> Vec<Finding> {
     }
 
     let info = ctx.measure(&dir);
-    let mut explanation = String::from(
+    let mut explanation = String::from(t!(
         "Lo que has tirado sigue ocupando espacio hasta que se vacía la Papelera. Vaciarla es \
          definitivo: después no se puede recuperar, así que revisa el contenido antes.",
-    );
+        "What you threw away still takes up space until the Trash is emptied. Emptying it is \
+         permanent: nothing can be recovered afterwards, so check what is in it first."
+    ));
     if info.unreadable > 0 {
-        explanation.push_str(" Una parte no se pudo leer, así que puede ocupar más.");
+        explanation.push_str(t!(
+            " Una parte no se pudo leer, así que puede ocupar más.",
+            " Part of it could not be read, so it may take up more space."
+        ));
     }
-    vec![
-        Finding::new(SCANNER_ID, Area::System, "papelera", "Vaciar la Papelera")
-            .subtitle(dir.display().to_string())
-            .measured(&info)
-            .explanation(explanation)
-            .risk(Risk::Review)
-            .recovery(Recovery::None)
-            .selected(false)
-            .action(Action::EmptyTrash),
-    ]
+    vec![Finding::new(
+        SCANNER_ID,
+        Area::System,
+        "papelera",
+        t!("Vaciar la Papelera", "Empty the Trash"),
+    )
+    .subtitle(dir.display().to_string())
+    .measured(&info)
+    .explanation(explanation)
+    .risk(Risk::Review)
+    .recovery(Recovery::None)
+    .selected(false)
+    .action(Action::EmptyTrash)]
 }
 
 #[cfg(test)]

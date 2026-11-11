@@ -7,6 +7,7 @@ use gpui::{
     Window,
 };
 use hm_core::fmt::{human_memory, human_size};
+use hm_core::{t, tf};
 use hm_system::types::{BatteryStats, MemoryPressure, ProcessStats, SystemSnapshot, ThermalState};
 
 use super::scroll_pane;
@@ -18,8 +19,6 @@ use crate::ui::chrome::{big_number, card, empty_state, eyebrow, page_header};
 use crate::ui::controls::{dot, live_dot, pill};
 use crate::ui::{clip, col, icon, row, TextExt};
 
-const CPU_STOPS: (u32, u32) = (0x5EEAD4, 0x60A5FA);
-
 impl Shell {
     pub fn render_monitor(&mut self, window: &mut Window, _cx: &mut Context<Self>) -> AnyElement {
         let uptime = self
@@ -28,10 +27,16 @@ impl Shell {
             .as_ref()
             .map(|s| format_uptime(s.uptime_secs));
         let subtitle: SharedString = match uptime {
-            Some(uptime) => {
-                format!("Encendido desde hace {uptime}. Se actualiza cada segundo.").into()
-            }
-            None => "Cómo va tu Mac, ahora mismo.".into(),
+            Some(uptime) => tf!(
+                "Encendido desde hace {uptime}. Se actualiza cada segundo.",
+                "Up for {uptime}. Updates every second."
+            )
+            .into(),
+            None => t!(
+                "Cómo va tu Mac, ahora mismo.",
+                "How your Mac is doing, right now."
+            )
+            .into(),
         };
         let header = page_header(
             "Monitor",
@@ -44,7 +49,7 @@ impl Shell {
                     div()
                         .fs(font::CAPTION)
                         .text_color(theme::text_2())
-                        .child("En directo"),
+                        .child(t!("En directo", "Live")),
                 )
                 .into_any_element()],
         );
@@ -55,8 +60,8 @@ impl Shell {
                 .child(empty_state(
                     Icon::Activity,
                     theme::teal(),
-                    "Leyendo sensores",
-                    "Un segundo.",
+                    t!("Leyendo sensores", "Reading sensors"),
+                    t!("Un segundo.", "One moment."),
                     None,
                 ))
                 .into_any_element();
@@ -69,9 +74,13 @@ impl Shell {
         let thermal = render_thermal_card(snapshot.thermal);
         let battery = render_battery_card(snapshot.battery.as_ref());
         let disks = render_disks_card(&snapshot);
-        let by_cpu = render_process_card("Más CPU", &snapshot.top_by_cpu, ProcessMetric::Cpu);
+        let by_cpu = render_process_card(
+            t!("Más CPU", "Top CPU"),
+            &snapshot.top_by_cpu,
+            ProcessMetric::Cpu,
+        );
         let by_memory = render_process_card(
-            "Más memoria",
+            t!("Más memoria", "Top memory"),
             &snapshot.top_by_memory,
             ProcessMetric::Memory,
         );
@@ -120,15 +129,15 @@ impl Shell {
         let mut shades: Vec<Hsla> = Vec::with_capacity(cores.len());
         for (position, cluster) in clusters.iter().enumerate().rev() {
             let color = if position == 0 {
-                theme::hex(CPU_STOPS.0)
+                theme::teal()
             } else {
-                theme::hex(CPU_STOPS.1)
+                theme::slate()
             };
             shades.extend(std::iter::repeat_n(color, cluster.logical_cpus as usize));
         }
-        shades.resize(cores.len(), theme::hex(CPU_STOPS.0));
+        shades.resize(cores.len(), theme::teal());
         let core_label = if clusters.is_empty() {
-            format!("{} núcleos", cores.len())
+            tf!("{} núcleos", "{} cores", cores.len())
         } else {
             clusters
                 .iter()
@@ -145,9 +154,9 @@ impl Shell {
                         .flex_none()
                         .w(px(170.))
                         .gap(sp(0.5))
-                        .child(card_title(Icon::Cpu, "Procesador"))
+                        .child(card_title(Icon::Cpu, t!("Procesador", "CPU")))
                         .child(big_number(
-                            format!("{:.0} %", cpu.usage_percent),
+                            tf!("{:.0} %", "{:.0}%", cpu.usage_percent),
                             font::DISPLAY,
                             theme::text_1(),
                         ))
@@ -162,15 +171,7 @@ impl Shell {
                                 .fs(font::MICRO)
                                 .tabular()
                                 .text_color(theme::text_3())
-                                .child(
-                                    format!(
-                                        "Carga {:.1} · {:.1} · {:.1}",
-                                        cpu.load_average[0],
-                                        cpu.load_average[1],
-                                        cpu.load_average[2]
-                                    )
-                                    .replace('.', ","),
-                                ),
+                                .child(load_text(&cpu.load_average)),
                         ),
                 )
                 .child(
@@ -181,7 +182,7 @@ impl Shell {
                         .child(div().h(px(60.)).w_full().child(sparkline(
                             history,
                             100.0,
-                            theme::hex(CPU_STOPS.0),
+                            theme::teal(),
                         )))
                         .child(
                             row().w_full().gap(px(3.)).h(px(28.)).items_end().children(
@@ -211,11 +212,8 @@ impl Shell {
         let other = memory.used.saturating_sub(accounted);
         let free = memory.total.saturating_sub(memory.used.max(accounted));
         let fraction = |bytes: u64| bytes as f32 / total as f32;
-        let (app_color, wired_color, compressed_color) = (
-            theme::hex(0x60A5FA),
-            theme::hex(0xA78BFA),
-            theme::hex(0xFBBF24),
-        );
+        let (app_color, wired_color, compressed_color) =
+            (theme::slate(), theme::violet(), theme::orange());
         let segments: Vec<(f32, Background)> = vec![
             (fraction(memory.app), app_color.into()),
             (fraction(memory.wired), wired_color.into()),
@@ -224,9 +222,9 @@ impl Shell {
             (fraction(free), theme::surface_2().into()),
         ];
         let (pressure_label, pressure_color) = match memory.pressure {
-            MemoryPressure::Normal => ("Presión normal", theme::green()),
-            MemoryPressure::Warning => ("Presión alta", theme::amber()),
-            MemoryPressure::Critical => ("Presión crítica", theme::rose()),
+            MemoryPressure::Normal => (t!("Presión normal", "Normal pressure"), theme::green()),
+            MemoryPressure::Warning => (t!("Presión alta", "High pressure"), theme::amber()),
+            MemoryPressure::Critical => (t!("Presión crítica", "Critical pressure"), theme::rose()),
         };
         card().w_full().p(sp(4.)).child(
             row()
@@ -237,7 +235,7 @@ impl Shell {
                         .flex_none()
                         .w(px(170.))
                         .gap(sp(0.5))
-                        .child(card_title(Icon::Memory, "Memoria"))
+                        .child(card_title(Icon::Memory, t!("Memoria", "Memory")))
                         .child(big_number(
                             human_memory(memory.used),
                             font::DISPLAY,
@@ -247,7 +245,7 @@ impl Shell {
                             div()
                                 .fs(font::CAPTION)
                                 .text_color(theme::text_2())
-                                .child(format!("de {}", human_memory(memory.total))),
+                                .child(tf!("de {}", "of {}", human_memory(memory.total))),
                         ),
                 )
                 .child(
@@ -266,13 +264,14 @@ impl Shell {
                                         .tabular()
                                         .text_color(theme::text_2())
                                         .child(if memory.swap_total > 0 {
-                                            format!(
+                                            tf!(
                                                 "Intercambio: {} de {}",
+                                                "Swap: {} of {}",
                                                 human_memory(memory.swap_used),
                                                 human_memory(memory.swap_total)
                                             )
                                         } else {
-                                            "Sin intercambio".to_string()
+                                            t!("Sin intercambio", "No swap").to_string()
                                         }),
                                 ),
                         )
@@ -283,12 +282,20 @@ impl Shell {
                                 .gap_x(sp(4.))
                                 .gap_y(sp(0.5))
                                 .child(legend(app_color, "Apps", memory.app))
-                                .child(legend(wired_color, "Reservada", memory.wired))
-                                .child(legend(compressed_color, "Comprimida", memory.compressed))
+                                .child(legend(wired_color, t!("Reservada", "Wired"), memory.wired))
+                                .child(legend(
+                                    compressed_color,
+                                    t!("Comprimida", "Compressed"),
+                                    memory.compressed,
+                                ))
                                 .when(other > 0, |this| {
-                                    this.child(legend(theme::surface_4(), "Otra", other))
+                                    this.child(legend(
+                                        theme::surface_4(),
+                                        t!("Otra", "Other"),
+                                        other,
+                                    ))
                                 })
-                                .child(legend(theme::surface_3(), "Libre", free)),
+                                .child(legend(theme::surface_3(), t!("Libre", "Free"), free)),
                         ),
                 ),
         )
@@ -302,17 +309,17 @@ impl Shell {
             .chain(tx.iter())
             .copied()
             .fold(1_000_000.0_f32, f32::max);
-        small_card(Icon::Network, "Red")
+        small_card(Icon::Network, t!("Red", "Network"))
             .child(
                 row()
                     .gap(sp(3.5))
                     .child(rate(
-                        "Baja",
+                        t!("Baja", "Down"),
                         snapshot.network.rx_bytes_per_sec,
                         theme::blue(),
                     ))
                     .child(rate(
-                        "Sube",
+                        t!("Sube", "Up"),
                         snapshot.network.tx_bytes_per_sec,
                         theme::violet(),
                     )),
@@ -406,28 +413,47 @@ fn rate(label: &'static str, bytes_per_sec: u64, color: Hsla) -> impl IntoElemen
 
 fn render_thermal_card(thermal: ThermalState) -> impl IntoElement {
     let (label, detail, color, fraction) = match thermal {
-        ThermalState::Nominal => ("Fresco", "Sin ninguna limitación.", theme::green(), 0.2),
+        ThermalState::Nominal => (
+            t!("Fresco", "Cool"),
+            t!("Sin ninguna limitación.", "Running at full speed."),
+            theme::green(),
+            0.2,
+        ),
         ThermalState::Fair => (
-            "Templado",
-            "Algo de calor, nada que notar.",
+            t!("Templado", "Warm"),
+            t!(
+                "Algo de calor, nada que notar.",
+                "A little warm, nothing you'd notice."
+            ),
             theme::lime(),
             0.45,
         ),
         ThermalState::Serious => (
-            "Caliente",
-            "macOS está bajando el ritmo.",
+            t!("Caliente", "Hot"),
+            t!(
+                "macOS está bajando el ritmo.",
+                "macOS is slowing things down."
+            ),
             theme::amber(),
             0.75,
         ),
         ThermalState::Critical => (
-            "Muy caliente",
-            "Rendimiento muy limitado.",
+            t!("Muy caliente", "Very hot"),
+            t!(
+                "Rendimiento muy limitado.",
+                "Performance is heavily limited."
+            ),
             theme::rose(),
             1.0,
         ),
-        ThermalState::Unknown => ("Sin datos", "No hemos podido leerlo.", theme::text_3(), 0.0),
+        ThermalState::Unknown => (
+            t!("Sin datos", "No data"),
+            t!("No hemos podido leerlo.", "Couldn't read it."),
+            theme::text_3(),
+            0.0,
+        ),
     };
-    small_card(Icon::Thermometer, "Temperatura")
+    small_card(Icon::Thermometer, t!("Temperatura", "Temperature"))
         .child(big_number(label, font::HEADLINE + 2.0, color))
         .child(
             div()
@@ -453,11 +479,11 @@ fn render_thermal_card(thermal: ThermalState) -> impl IntoElement {
 }
 
 fn render_battery_card(battery: Option<&BatteryStats>) -> impl IntoElement {
-    let card = small_card(Icon::Battery, "Batería");
+    let card = small_card(Icon::Battery, t!("Batería", "Battery"));
     let Some(battery) = battery else {
         return card
             .child(big_number(
-                "Sin batería",
+                t!("Sin batería", "No battery"),
                 font::HEADLINE + 2.0,
                 theme::text_3(),
             ))
@@ -465,24 +491,32 @@ fn render_battery_card(battery: Option<&BatteryStats>) -> impl IntoElement {
                 div()
                     .fs(font::CAPTION)
                     .text_color(theme::text_2())
-                    .child("Este Mac va siempre enchufado."),
+                    .child(t!(
+                        "Este Mac va siempre enchufado.",
+                        "This Mac always runs plugged in."
+                    )),
             );
     };
     let state = if battery.charging {
-        "Cargando".to_string()
+        t!("Cargando", "Charging").to_string()
     } else if battery.plugged_in {
-        "Enchufada".to_string()
+        t!("Enchufada", "Plugged in").to_string()
     } else if let Some(minutes) = battery.minutes_remaining {
-        format!("Quedan {} h {} min", minutes / 60, minutes % 60)
+        tf!(
+            "Quedan {} h {} min",
+            "{} h {} min left",
+            minutes / 60,
+            minutes % 60
+        )
     } else {
-        "Con batería".to_string()
+        t!("Con batería", "On battery").to_string()
     };
     let mut facts: Vec<String> = Vec::new();
     if let Some(health) = battery.health_percent {
-        facts.push(format!("Salud {health} %"));
+        facts.push(tf!("Salud {health} %", "Health {health}%"));
     }
     if let Some(cycles) = battery.cycle_count {
-        facts.push(format!("{cycles} ciclos"));
+        facts.push(tf!("{cycles} ciclos", "{cycles} cycles"));
     }
     let condition_bad = battery
         .condition
@@ -497,7 +531,7 @@ fn render_battery_card(battery: Option<&BatteryStats>) -> impl IntoElement {
         row()
             .gap(sp(2.))
             .child(big_number(
-                format!("{} %", battery.percent),
+                tf!("{} %", "{}%", battery.percent),
                 font::HEADLINE + 2.0,
                 theme::text_1(),
             ))
@@ -532,8 +566,9 @@ fn render_battery_card(battery: Option<&BatteryStats>) -> impl IntoElement {
                 theme::text_2()
             })
             .child(if condition_bad {
-                format!(
+                tf!(
                     "macOS dice: {}",
+                    "macOS says: {}",
                     battery.condition.clone().unwrap_or_default()
                 )
             } else {
@@ -544,13 +579,13 @@ fn render_battery_card(battery: Option<&BatteryStats>) -> impl IntoElement {
 
 fn render_disks_card(snapshot: &SystemSnapshot) -> impl IntoElement {
     let disk = super::resumen::main_disk(snapshot);
-    let card = small_card(Icon::Disk, "Disco");
+    let card = small_card(Icon::Disk, t!("Disco", "Disk"));
     match disk {
         None => card.child(
             div()
                 .fs(font::CAPTION)
                 .text_color(theme::text_2())
-                .child("No hemos podido leerlo."),
+                .child(t!("No hemos podido leerlo.", "Couldn't read it.")),
         ),
         Some(disk) => {
             let used = disk.total.saturating_sub(disk.available);
@@ -572,7 +607,7 @@ fn render_disks_card(snapshot: &SystemSnapshot) -> impl IntoElement {
                     .fs(font::CAPTION)
                     .tabular()
                     .text_color(theme::text_2())
-                    .child(format!("libres de {}", human_size(disk.total))),
+                    .child(tf!("libres de {}", "free of {}", human_size(disk.total))),
             )
             .child(
                 div()
@@ -624,7 +659,7 @@ fn render_process_card(
                 .child(title),
         )
         .children(if processes.is_empty() {
-            vec![eyebrow("Sin datos todavía").into_any_element()]
+            vec![eyebrow(t!("Sin datos todavía", "No data yet")).into_any_element()]
         } else {
             processes
                 .iter()
@@ -632,7 +667,7 @@ fn render_process_card(
                 .map(|process| {
                     let (value, fraction) = match metric {
                         ProcessMetric::Cpu => (
-                            format!("{:.0} %", process.cpu_percent),
+                            tf!("{:.0} %", "{:.0}%", process.cpu_percent),
                             process.cpu_percent / peak,
                         ),
                         ProcessMetric::Memory => (
@@ -684,10 +719,26 @@ fn render_process_card(
 
 fn cluster_name(name: &str) -> String {
     match name {
-        "Performance" => "de rendimiento".to_string(),
-        "Efficiency" => "de eficiencia".to_string(),
-        "Super" => "de alto rendimiento".to_string(),
-        other => format!("«{other}»"),
+        "Performance" => t!("de rendimiento", "performance").to_string(),
+        "Efficiency" => t!("de eficiencia", "efficiency").to_string(),
+        "Super" => t!("de alto rendimiento", "super").to_string(),
+        other => tf!("«{other}»", "“{other}”"),
+    }
+}
+
+/// The load averages, with the decimal mark of the current language.
+fn load_text(load: &[f64; 3]) -> String {
+    let text = tf!(
+        "Carga {:.1} · {:.1} · {:.1}",
+        "Load {:.1} · {:.1} · {:.1}",
+        load[0],
+        load[1],
+        load[2]
+    );
+    if hm_core::i18n::is_english() {
+        text
+    } else {
+        text.replace('.', ",")
     }
 }
 

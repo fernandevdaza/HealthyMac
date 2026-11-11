@@ -8,7 +8,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::Result;
 use hm_core::{
-    exec, Action, Area, Finding, Recovery, Risk, SafetyPolicy, SafetyViolation, ScanContext,
+    exec, t, tf, Action, Area, Finding, Recovery, Risk, SafetyPolicy, SafetyViolation, ScanContext,
 };
 use rayon::prelude::*;
 
@@ -61,9 +61,39 @@ const REMOVABLE_APPLE_PREFIXES: &[&str] = &[
     "com.apple.testflight",
 ];
 
+/// What a leftover is, as shown next to it.
+#[derive(Clone, Copy, Debug)]
+enum LeftoverKind {
+    ApplicationSupport,
+    Cache,
+    Logs,
+    Preferences,
+    SavedState,
+    HttpStorage,
+    WebKit,
+    Container,
+}
+
+impl LeftoverKind {
+    fn label(self) -> &'static str {
+        match self {
+            LeftoverKind::ApplicationSupport => {
+                t!("Soporte de aplicación", "Application Support")
+            }
+            LeftoverKind::Cache => t!("Caché", "Cache"),
+            LeftoverKind::Logs => t!("Registros", "Logs"),
+            LeftoverKind::Preferences => t!("Preferencias", "Preferences"),
+            LeftoverKind::SavedState => t!("Estado guardado", "Saved state"),
+            LeftoverKind::HttpStorage => t!("Almacenamiento HTTP", "HTTP storage"),
+            LeftoverKind::WebKit => t!("Datos de WebKit", "WebKit data"),
+            LeftoverKind::Container => t!("Contenedor", "Container"),
+        }
+    }
+}
+
 struct LeftoverPlace {
     relative: &'static str,
-    kind: &'static str,
+    kind: LeftoverKind,
     /// Items named after the bundle id, given as `{id}{suffix}`.
     id_suffixes: &'static [&'static str],
     /// Some apps name their folder after themselves instead.
@@ -73,49 +103,49 @@ struct LeftoverPlace {
 const LEFTOVER_PLACES: &[LeftoverPlace] = &[
     LeftoverPlace {
         relative: "Library/Application Support",
-        kind: "Soporte de aplicación",
+        kind: LeftoverKind::ApplicationSupport,
         id_suffixes: &[""],
         by_app_name: true,
     },
     LeftoverPlace {
         relative: "Library/Caches",
-        kind: "Caché",
+        kind: LeftoverKind::Cache,
         id_suffixes: &[""],
         by_app_name: true,
     },
     LeftoverPlace {
         relative: "Library/Logs",
-        kind: "Registros",
+        kind: LeftoverKind::Logs,
         id_suffixes: &[""],
         by_app_name: true,
     },
     LeftoverPlace {
         relative: "Library/Preferences",
-        kind: "Preferencias",
+        kind: LeftoverKind::Preferences,
         id_suffixes: &[".plist"],
         by_app_name: false,
     },
     LeftoverPlace {
         relative: "Library/Saved Application State",
-        kind: "Estado guardado",
+        kind: LeftoverKind::SavedState,
         id_suffixes: &[".savedState"],
         by_app_name: false,
     },
     LeftoverPlace {
         relative: "Library/HTTPStorages",
-        kind: "Almacenamiento HTTP",
+        kind: LeftoverKind::HttpStorage,
         id_suffixes: &["", ".binarycookies"],
         by_app_name: false,
     },
     LeftoverPlace {
         relative: "Library/WebKit",
-        kind: "Datos de WebKit",
+        kind: LeftoverKind::WebKit,
         id_suffixes: &[""],
         by_app_name: false,
     },
     LeftoverPlace {
         relative: "Library/Containers",
-        kind: "Contenedor",
+        kind: LeftoverKind::Container,
         id_suffixes: &[""],
         by_app_name: false,
     },
@@ -208,21 +238,25 @@ fn uninstall_blocker(
 ) -> Option<String> {
     let name = &info.name;
     if is_system {
-        return Some(format!(
-            "{name} forma parte de macOS, así que no se puede desinstalar."
+        return Some(tf!(
+            "{name} forma parte de macOS, así que no se puede desinstalar.",
+            "{name} is part of macOS, so it cannot be uninstalled."
         ));
     }
     match policy.check_removal(path) {
         Ok(()) => {}
         Err(SafetyViolation::UserExcluded(_)) => {
-            return Some(format!(
-                "{name} está en una ubicación que excluiste de la limpieza."
+            return Some(tf!(
+                "{name} está en una ubicación que excluiste de la limpieza.",
+                "{name} is in a location you excluded from cleaning."
             ));
         }
         Err(_) => {
-            return Some(format!(
+            return Some(tf!(
                 "{name} está en una ubicación que HealthyMac no toca. Usa su desinstalador, o \
-                 arrástrala a la Papelera desde el Finder."
+                 arrástrala a la Papelera desde el Finder.",
+                "{name} is in a location HealthyMac does not touch. Use its uninstaller, or drag \
+                 it to the Trash in the Finder."
             ));
         }
     }
@@ -233,9 +267,11 @@ fn uninstall_blocker(
     // App Management, but on a signed bundle it reaches TCC and this runs during a scan. A bundle
     // that protection refuses fails at clean time instead, when the user has asked for it.
     if !gate::mode_permits_write(&info.resolved) {
-        return Some(format!(
+        return Some(tf!(
             "{name} se instaló para todos los usuarios y hace falta una contraseña de administrador \
-             para quitarla. Arrástrala a la Papelera desde el Finder, que te la pedirá."
+             para quitarla. Arrástrala a la Papelera desde el Finder, que te la pedirá.",
+            "{name} was installed for all users, and removing it takes an administrator password. \
+             Drag it to the Trash in the Finder, which will ask you for it."
         ));
     }
     None
@@ -295,7 +331,7 @@ fn find_leftovers(ctx: &ScanContext, info: &BundleInfo, access: bool) -> Vec<Lef
             found.push(Leftover {
                 size: ctx.measure(&path).exclusive(),
                 path,
-                kind: place.kind.to_string(),
+                kind: place.kind.label().to_string(),
             });
         }
     }
@@ -462,7 +498,7 @@ pub fn uninstall_finding(app: &AppInfo, include_leftovers: bool) -> Finding {
         "apps.uninstall",
         Area::Apps,
         key,
-        format!("Desinstalar {}", app.name),
+        tf!("Desinstalar {}", "Uninstall {}", app.name),
     )
     .subtitle(app.path.display().to_string())
     .risk(Risk::Review)
@@ -475,10 +511,13 @@ pub fn uninstall_finding(app: &AppInfo, include_leftovers: bool) -> Finding {
 
     let mut paths = vec![app.path.clone()];
     let mut size = app.size;
-    let mut explanation = format!(
+    let mut explanation = tf!(
         "Mueve {} a la Papelera. Podrás recuperarla desde ahí hasta que la vacíes. Si macOS lo \
          impide, concede a HealthyMac el permiso «Gestión de apps» en Ajustes del Sistema, dentro \
          de Privacidad y seguridad.",
+        "Moves {} to the Trash. You can get it back from there until you empty it. If macOS \
+         blocks it, give HealthyMac the App Management permission in System Settings, under \
+         Privacy & Security.",
         app.name
     );
     if include_leftovers && !app.leftovers.is_empty() {
@@ -488,12 +527,17 @@ pub fn uninstall_finding(app: &AppInfo, include_leftovers: bool) -> Finding {
             .iter()
             .map(|leftover| leftover.size)
             .sum::<u64>();
-        explanation.push_str(
+        explanation.push_str(t!(
             " También se llevan sus datos: ajustes, cachés y lo que haya guardado. Si piensas \
              volver a instalarla, quizá quieras conservarlos.",
-        );
+            " Its data goes too: settings, caches and anything it saved. If you plan to install \
+             it again, you may want to keep them."
+        ));
     } else if !app.leftovers.is_empty() {
-        explanation.push_str(" Sus datos se quedan, por si vuelves a instalarla.");
+        explanation.push_str(t!(
+            " Sus datos se quedan, por si vuelves a instalarla.",
+            " Its data stays, in case you install it again."
+        ));
     }
 
     let mut finding = base
@@ -506,6 +550,12 @@ pub fn uninstall_finding(app: &AppInfo, include_leftovers: bool) -> Finding {
         finding = finding.blocked_by(&[process.as_str()]);
     }
     finding
+}
+
+/// The icon file of the app bundle at `path`, read from its `Info.plist`. `None` when the bundle
+/// names no icon file, as apps that keep theirs in an asset catalog do.
+pub fn icon_path_of(path: &Path) -> Option<PathBuf> {
+    crate::inventory::read_bundle(path).icon_path
 }
 
 #[cfg(test)]

@@ -4,7 +4,9 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use anyhow::Result;
-use hm_core::{fsutil, Action, Area, Finding, Recovery, Risk, ScanContext, Scanner, SizeInfo};
+use hm_core::{
+    fsutil, t, tf, Action, Area, Finding, Recovery, Risk, ScanContext, Scanner, SizeInfo,
+};
 use rayon::prelude::*;
 
 use super::policy;
@@ -46,10 +48,13 @@ impl Scanner for UserCaches {
         SCANNER_ID
     }
     fn name(&self) -> &'static str {
-        "Cachés de usuario"
+        t!("Cachés de usuario", "User caches")
     }
     fn description(&self) -> &'static str {
-        "Archivos temporales que las apps vuelven a generar cuando los necesitan."
+        t!(
+            "Archivos temporales que las apps vuelven a generar cuando los necesitan.",
+            "Temporary files that apps create again when they need them."
+        )
     }
     fn area(&self) -> Area {
         Area::System
@@ -163,32 +168,43 @@ fn measure_entry(ctx: &ScanContext, path: &Path, name: &str) -> Option<Entry> {
 
 fn own_finding(entry: &Entry, owner: Option<&CacheOwner>, limits: Limits) -> Finding {
     let display = owner.map_or(entry.name.as_str(), |owner| owner.display.as_str());
-    let mut explanation = format!(
+    let mut explanation = tf!(
         "Archivos temporales de {display}. Se regeneran solos cuando hacen falta; la primera vez \
-         puede ir algo más lento."
+         puede ir algo más lento.",
+        "Temporary files from {display}. They regenerate on their own when needed; the first time \
+         may be a little slower."
     );
     if entry.name.eq_ignore_ascii_case("com.apple.Safari") {
-        explanation = "Caché de red de Safari: lo mismo que borra «Vaciar cachés» en su menú \
-                       Desarrollo. Las páginas tardarán algo más en cargar la primera vez."
-            .to_string();
+        explanation = t!(
+            "Caché de red de Safari: lo mismo que borra «Vaciar cachés» en su menú \
+             Desarrollo. Las páginas tardarán algo más en cargar la primera vez.",
+            "Safari's network cache: the same thing “Empty Caches” clears in its Develop menu. \
+             Pages will take a little longer to load the first time."
+        )
+        .to_string();
     }
     if owner.is_some() {
-        explanation.push_str(&format!(" Hay que cerrar {display} antes de limpiarla."));
+        explanation.push_str(&tf!(
+            " Hay que cerrar {display} antes de limpiarla.",
+            " Quit {display} before cleaning it."
+        ));
     }
     let big = entry.info.exclusive() >= limits.big;
     let mut finding = Finding::new(
         SCANNER_ID,
         Area::System,
         &entry.name,
-        format!("Caché de {display}"),
+        tf!("Caché de {display}", "{display} cache"),
     )
     .trash(&entry.path)
     .measured(&entry.info);
     if big {
-        explanation.push_str(
+        explanation.push_str(t!(
             " Ocupa mucho, así que volver a generarla puede costar tiempo o datos. Por eso no va \
              preseleccionada.",
-        );
+            " It is large, so rebuilding it can cost time or data. That is why it is not \
+             preselected."
+        ));
         finding = finding.risk(Risk::Moderate).recovery(Recovery::Redownload);
     } else {
         finding = finding
@@ -197,7 +213,10 @@ fn own_finding(entry: &Entry, owner: Option<&CacheOwner>, limits: Limits) -> Fin
             .selected(true);
     }
     if entry.info.unreadable > 0 {
-        explanation.push_str(" Una parte no se pudo leer, así que puede ocupar más.");
+        explanation.push_str(t!(
+            " Una parte no se pudo leer, así que puede ocupar más.",
+            " Part of it could not be read, so it may take up more space."
+        ));
     }
     if let Some(owner) = owner {
         finding = finding.blocked_by(&[owner.process.as_str()]);
@@ -230,13 +249,19 @@ fn aggregate_finding(root: &Path, small: &[&Entry], apps: &InstalledApps) -> Opt
         SCANNER_ID,
         Area::System,
         "pequenas",
-        format!("Cachés pequeñas de {} apps", small.len()),
+        tf!(
+            "Cachés pequeñas de {} apps",
+            "Small caches from {} apps",
+            small.len()
+        ),
     )
     .subtitle(root.display().to_string())
-    .explanation(
+    .explanation(t!(
         "Cachés que ocupan poco por separado. Cada app las regenera cuando las necesita. Las de \
          apps abiertas ahora mismo se dejan para el próximo escaneo.",
-    )
+        "Caches that are small on their own. Each app regenerates them when it needs them. Those \
+         of apps that are open right now are left for the next scan."
+    ))
     .size(bytes)
     .shared_bytes(shared)
     .items(files)

@@ -8,8 +8,10 @@ use std::time::Duration;
 use anyhow::{bail, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use hm_core::fmt::human_size;
+use hm_core::i18n::{set_language, Language};
 use hm_core::{
-    run_scan, Area, CancelToken, CleanOptions, Cleaner, Finding, ScanContext, ScanEvent, Scanner,
+    run_scan, t, tf, Area, CancelToken, CleanOptions, Cleaner, Finding, ScanContext, ScanEvent,
+    Scanner,
 };
 
 #[derive(Parser)]
@@ -107,8 +109,12 @@ fn scan(ctx: &ScanContext, area: Option<Area>, verbose: bool) -> Vec<Finding> {
             raw_count.fetch_add(findings.len(), Ordering::Relaxed);
             if verbose {
                 eprintln!(
-                    "  {scanner_id}: {} hallazgos en {elapsed:.1?}",
-                    findings.len()
+                    "{}",
+                    tf!(
+                        "  {scanner_id}: {} hallazgos en {elapsed:.1?}",
+                        "  {scanner_id}: {} items in {elapsed:.1?}",
+                        findings.len()
+                    )
                 );
             }
         }
@@ -116,10 +122,19 @@ fn scan(ctx: &ScanContext, area: Option<Area>, verbose: bool) -> Vec<Finding> {
     });
     let dropped = raw_count.into_inner().saturating_sub(findings.len());
     if verbose && dropped > 0 {
-        eprintln!("  {dropped} hallazgos descartados por solaparse con otros");
+        eprintln!(
+            "{}",
+            tf!(
+                "  {dropped} hallazgos descartados por solaparse con otros",
+                "  {dropped} items dropped because they overlap others"
+            )
+        );
     }
     for failure in failures.into_inner().unwrap_or_default() {
-        eprintln!("error en escáner: {failure}");
+        eprintln!(
+            "{}",
+            tf!("error en escáner: {failure}", "scanner error: {failure}")
+        );
     }
     findings.sort_by_key(|finding| std::cmp::Reverse(finding.size));
     findings
@@ -130,7 +145,25 @@ fn dump(value: &impl serde::Serialize) -> Result<()> {
     Ok(())
 }
 
+/// The terminal's locale, in POSIX order: `LC_ALL` over `LC_MESSAGES` over `LANG`.
+fn terminal_language() -> Language {
+    let locale = ["LC_ALL", "LC_MESSAGES", "LANG"]
+        .into_iter()
+        .filter_map(|name| std::env::var(name).ok())
+        .find(|value| !value.is_empty());
+    language_for_locale(locale.as_deref())
+}
+
+/// Spanish when the locale is Spanish or there is none, English for any other.
+fn language_for_locale(locale: Option<&str>) -> Language {
+    match locale {
+        Some(locale) if !locale.starts_with("es") => Language::English,
+        _ => Language::Spanish,
+    }
+}
+
 fn main() -> Result<()> {
+    set_language(terminal_language());
     hm_core::threads::configure_global_pool();
     let cli = Cli::parse();
     let ctx = ScanContext::for_current_user()?;
@@ -169,14 +202,21 @@ fn main() -> Result<()> {
                 .sum();
             let total: u64 = findings.iter().map(|f| f.size).sum();
             println!(
-                "\nTotal encontrado: {} · Seleccionado por defecto: {}",
-                human_size(total),
-                human_size(selected)
+                "{}",
+                tf!(
+                    "\nTotal encontrado: {} · Seleccionado por defecto: {}",
+                    "\nTotal found: {} · Selected by default: {}",
+                    human_size(total),
+                    human_size(selected)
+                )
             );
         }
         Command::Clean { ids, yes } => {
             if ids.is_empty() {
-                bail!("indica al menos un id (usa `healthymac scan --json` para verlos)");
+                bail!(t!(
+                    "indica al menos un id (usa `healthymac scan --json` para verlos)",
+                    "give at least one id (run `healthymac scan --json` to see them)"
+                ));
             }
             let wanted: HashSet<&str> = ids.iter().map(String::as_str).collect();
             let findings: Vec<Finding> = scan(&ctx, None, false)
@@ -186,7 +226,7 @@ fn main() -> Result<()> {
             if findings.len() != wanted.len() {
                 let found: HashSet<&str> = findings.iter().map(|f| f.id.as_str()).collect();
                 for id in wanted.difference(&found) {
-                    eprintln!("no encontrado: {id}");
+                    eprintln!("{}", tf!("no encontrado: {id}", "not found: {id}"));
                 }
             }
             let cleaner = Cleaner::new(
@@ -218,10 +258,18 @@ fn main() -> Result<()> {
                 }
             }
             println!(
-                "\n{}Liberado: {} · En la Papelera: {}",
-                if yes { "" } else { "[simulación] " },
-                human_size(report.freed_bytes()),
-                human_size(report.trashed_bytes())
+                "{}",
+                tf!(
+                    "\n{}Liberado: {} · En la Papelera: {}",
+                    "\n{}Freed: {} · In the Trash: {}",
+                    if yes {
+                        ""
+                    } else {
+                        t!("[simulación] ", "[dry run] ")
+                    },
+                    human_size(report.freed_bytes()),
+                    human_size(report.trashed_bytes())
+                )
             );
         }
         Command::Models => dump(&hm_ai::inventory::scan(&ctx)?)?,
@@ -245,4 +293,18 @@ fn main() -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_spanish_locale_or_none_keeps_spanish_and_any_other_is_english() {
+        assert_eq!(language_for_locale(None), Language::Spanish);
+        assert_eq!(language_for_locale(Some("es_BO.UTF-8")), Language::Spanish);
+        assert_eq!(language_for_locale(Some("es")), Language::Spanish);
+        assert_eq!(language_for_locale(Some("en_US.UTF-8")), Language::English);
+        assert_eq!(language_for_locale(Some("C")), Language::English);
+    }
 }

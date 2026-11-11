@@ -43,7 +43,7 @@ impl ScanContext {
     pub fn for_current_user() -> Result<Self> {
         let home = std::env::var_os("HOME")
             .map(PathBuf::from)
-            .context("HOME no está definido")?;
+            .context(crate::t!("HOME no está definido", "HOME is not set"))?;
         let config = Config::load(&Config::default_path(&home))?;
         Ok(Self::with_home(home, config))
     }
@@ -136,7 +136,9 @@ pub fn run_scan(
                         .downcast_ref::<&str>()
                         .map(|text| text.to_string())
                         .or_else(|| payload.downcast_ref::<String>().cloned())
-                        .unwrap_or_else(|| "pánico sin mensaje".to_string());
+                        .unwrap_or_else(|| {
+                            crate::t!("pánico sin mensaje", "panic without a message").to_string()
+                        });
                     on_event(ScanEvent::Failed { scanner_id, error });
                     Vec::new()
                 }

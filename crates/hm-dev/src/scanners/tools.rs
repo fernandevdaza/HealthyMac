@@ -5,7 +5,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use anyhow::Result;
-use hm_core::{fsutil, Action, Area, Finding, Recovery, Risk, ScanContext, Scanner};
+use hm_core::{fsutil, t, tf, Action, Area, Finding, Recovery, Risk, ScanContext, Scanner};
 use rayon::prelude::*;
 
 use super::{table_findings, CacheSpec, HasTool, Removal};
@@ -22,80 +22,102 @@ const EMULATOR_AND_STUDIO: &[&str] = &[
     "studio",
 ];
 
-pub(super) const SPECS: &[CacheSpec] = &[
-    CacheSpec {
-        key: "playwright",
-        group: "Navegadores de pruebas",
-        title: "Navegadores de Playwright",
-        paths: &["Library/Caches/ms-playwright"],
-        removal: Removal::Contents,
-        risk: Risk::Moderate,
-        recovery: Recovery::Redownload,
-        selected: false,
-        blocked_by: &[],
-        explanation: "Navegadores descargados por Playwright. Tus tests no funcionarán hasta que los descargues de nuevo con «playwright install».",
-    },
-    CacheSpec {
-        key: "puppeteer",
-        group: "Navegadores de pruebas",
-        title: "Navegadores de Puppeteer",
-        paths: &[".cache/puppeteer"],
-        removal: Removal::Contents,
-        risk: Risk::Moderate,
-        recovery: Recovery::Redownload,
-        selected: false,
-        blocked_by: &[],
-        explanation: "Navegadores descargados por Puppeteer. Hay que volver a descargarlos para que funcionen tus tests.",
-    },
-    CacheSpec {
-        key: "selenium",
-        group: "Navegadores de pruebas",
-        title: "Controladores de Selenium",
-        paths: &[".cache/selenium"],
-        removal: Removal::Contents,
-        risk: Risk::Safe,
-        recovery: Recovery::Redownload,
-        selected: true,
-        blocked_by: &[],
-        explanation: "Navegadores y controladores descargados por Selenium Manager. Los vuelve a descargar solo cuando hacen falta.",
-    },
-    CacheSpec {
-        key: "electron",
-        group: "Node",
-        title: "Caché de Electron",
-        paths: &["Library/Caches/electron", "Library/Caches/electron-builder"],
-        removal: Removal::Contents,
-        risk: Risk::Safe,
-        recovery: Recovery::Redownload,
-        selected: true,
-        blocked_by: &[],
-        explanation: "Versiones de Electron descargadas al instalar dependencias o empaquetar apps. Se vuelven a descargar cuando hacen falta. Las apps de Electron que usas no están aquí.",
-    },
-    CacheSpec {
-        key: "node_gyp",
-        group: "Node",
-        title: "Cabeceras de node-gyp",
-        paths: &["Library/Caches/node-gyp", ".node-gyp"],
-        removal: Removal::Contents,
-        risk: Risk::Safe,
-        recovery: Recovery::Redownload,
-        selected: true,
-        blocked_by: &[],
-        explanation: "Cabeceras de Node para compilar módulos nativos. Se vuelven a descargar la próxima vez que compiles uno.",
-    },
-    CacheSpec {
-        key: "turborepo",
-        group: "Node",
-        title: "Caché global de Turborepo",
-        paths: &["Library/Caches/turborepo", "Library/Caches/turbo", ".cache/turbo"],
-        removal: Removal::Contents,
-        risk: Risk::Safe,
-        recovery: Recovery::Rebuild,
-        selected: true,
-        blocked_by: &[],
-        explanation: "Resultados guardados de tareas de Turborepo. Vuelven al ejecutar esas tareas de nuevo. Tu sesión de Turborepo no se toca.",
-    },
-];
+/// Built on every scan rather than kept in a `const`, so its text follows the current language.
+pub(super) fn specs() -> Vec<CacheSpec> {
+    let browsers = t!("Navegadores de pruebas", "Test browsers");
+    vec![
+        CacheSpec {
+            key: "playwright",
+            group: browsers,
+            title: t!("Navegadores de Playwright", "Playwright browsers"),
+            paths: &["Library/Caches/ms-playwright"],
+            removal: Removal::Contents,
+            risk: Risk::Moderate,
+            recovery: Recovery::Redownload,
+            selected: false,
+            blocked_by: &[],
+            explanation: t!(
+                "Navegadores descargados por Playwright. Tus tests no funcionarán hasta que los descargues de nuevo con «playwright install».",
+                "Browsers downloaded by Playwright. Your tests won't run until you download them again with “playwright install”."
+            ),
+        },
+        CacheSpec {
+            key: "puppeteer",
+            group: browsers,
+            title: t!("Navegadores de Puppeteer", "Puppeteer browsers"),
+            paths: &[".cache/puppeteer"],
+            removal: Removal::Contents,
+            risk: Risk::Moderate,
+            recovery: Recovery::Redownload,
+            selected: false,
+            blocked_by: &[],
+            explanation: t!(
+                "Navegadores descargados por Puppeteer. Hay que volver a descargarlos para que funcionen tus tests.",
+                "Browsers downloaded by Puppeteer. They have to be downloaded again for your tests to run."
+            ),
+        },
+        CacheSpec {
+            key: "selenium",
+            group: browsers,
+            title: t!("Controladores de Selenium", "Selenium drivers"),
+            paths: &[".cache/selenium"],
+            removal: Removal::Contents,
+            risk: Risk::Safe,
+            recovery: Recovery::Redownload,
+            selected: true,
+            blocked_by: &[],
+            explanation: t!(
+                "Navegadores y controladores descargados por Selenium Manager. Los vuelve a descargar solo cuando hacen falta.",
+                "Browsers and drivers downloaded by Selenium Manager. It downloads them again on its own when needed."
+            ),
+        },
+        CacheSpec {
+            key: "electron",
+            group: "Node",
+            title: t!("Caché de Electron", "Electron cache"),
+            paths: &["Library/Caches/electron", "Library/Caches/electron-builder"],
+            removal: Removal::Contents,
+            risk: Risk::Safe,
+            recovery: Recovery::Redownload,
+            selected: true,
+            blocked_by: &[],
+            explanation: t!(
+                "Versiones de Electron descargadas al instalar dependencias o empaquetar apps. Se vuelven a descargar cuando hacen falta. Las apps de Electron que usas no están aquí.",
+                "Electron versions downloaded when installing dependencies or packaging apps. They are downloaded again when needed. The Electron apps you use are not here."
+            ),
+        },
+        CacheSpec {
+            key: "node_gyp",
+            group: "Node",
+            title: t!("Cabeceras de node-gyp", "node-gyp headers"),
+            paths: &["Library/Caches/node-gyp", ".node-gyp"],
+            removal: Removal::Contents,
+            risk: Risk::Safe,
+            recovery: Recovery::Redownload,
+            selected: true,
+            blocked_by: &[],
+            explanation: t!(
+                "Cabeceras de Node para compilar módulos nativos. Se vuelven a descargar la próxima vez que compiles uno.",
+                "Node headers for building native modules. They are downloaded again the next time you build one."
+            ),
+        },
+        CacheSpec {
+            key: "turborepo",
+            group: "Node",
+            title: t!("Caché global de Turborepo", "Turborepo global cache"),
+            paths: &["Library/Caches/turborepo", "Library/Caches/turbo", ".cache/turbo"],
+            removal: Removal::Contents,
+            risk: Risk::Safe,
+            recovery: Recovery::Rebuild,
+            selected: true,
+            blocked_by: &[],
+            explanation: t!(
+                "Resultados guardados de tareas de Turborepo. Vuelven al ejecutar esas tareas de nuevo. Tu sesión de Turborepo no se toca.",
+                "Saved results of Turborepo tasks. They come back when you run those tasks again. Your Turborepo login is left alone."
+            ),
+        },
+    ]
+}
 
 /// Editors built on VS Code. Only the folders that hold caches and logs are ever named, so `User`
 /// (settings, snippets, history), `Backups` (unsaved files) and `~/.vscode/extensions` are out of
@@ -164,12 +186,13 @@ fn editor_findings(ctx: &ScanContext, editor: &Editor) -> Vec<Finding> {
                 ID,
                 Area::Developer,
                 format!("editor_cache:{}", editor.support_folder),
-                format!("Cachés de {}", editor.name),
+                tf!("Cachés de {}", "{} caches", editor.name),
             )
-            .group("Editores")
+            .group(t!("Editores", "Editors"))
             .subtitle(support.display().to_string())
-            .explanation(format!(
+            .explanation(tf!(
                 "Cachés internas de {}. Se regeneran solas, aunque puede tardar algo más en abrir la próxima vez. Tus ajustes, extensiones y archivos sin guardar no se tocan.",
+                "Internal {} caches. They regenerate on their own, though it may take a little longer to open next time. Your settings, extensions and unsaved files are left alone.",
                 editor.name
             ))
             .measured(&info)
@@ -192,13 +215,14 @@ fn editor_findings(ctx: &ScanContext, editor: &Editor) -> Vec<Finding> {
                 ID,
                 Area::Developer,
                 format!("editor_logs:{}", editor.support_folder),
-                format!("Registros de {}", editor.name),
+                tf!("Registros de {}", "{} logs", editor.name),
             )
-            .group("Editores")
+            .group(t!("Editores", "Editors"))
             .subtitle(logs.display().to_string())
-            .explanation(
+            .explanation(t!(
                 "Registros de sesiones anteriores. Solo sirven para investigar errores pasados.",
-            )
+                "Logs from earlier sessions. They are only useful for looking into past errors."
+            ))
             .measured(&info)
             .risk(Risk::Safe)
             .recovery(Recovery::Automatic)
@@ -287,6 +311,10 @@ fn ide_findings(ctx: &ScanContext, family: &IdeFamily) -> Vec<Finding> {
     let caches = ide_folders(ctx, family.caches, family);
     let logs = ide_folders(ctx, family.logs, family);
     let config = ide_folders(ctx, family.config, family);
+    let group = t!(
+        "IDE de JetBrains y Android Studio",
+        "JetBrains IDEs and Android Studio"
+    );
 
     // A version only counts as old if a newer one has actually been used on this Mac.
     let mut latest: HashMap<String, Vec<u64>> = HashMap::new();
@@ -324,21 +352,23 @@ fn ide_findings(ctx: &ScanContext, family: &IdeFamily) -> Vec<Finding> {
                 ID,
                 Area::Developer,
                 format!("ide_cache:{name}"),
-                format!("Caché de {}", label(name)),
+                tf!("Caché de {}", "{} cache", label(name)),
             )
-            .group("IDE de JetBrains y Android Studio")
+            .group(group)
             .trash(path)
             .measured(&info)
             .recovery(Recovery::Automatic)
             .blocked_by(&[process(name).as_str()]);
             Some(if old {
-                finding.risk(Risk::Safe).selected(true).tag("version_antigua").explanation(
+                finding.risk(Risk::Safe).selected(true).tag("version_antigua").explanation(t!(
                     "Caché de una versión del IDE que ya actualizaste. Ya no se usa, salvo que vuelvas a abrir esa versión.",
-                )
+                    "Cache of an IDE version you have since updated. It is no longer used unless you open that version again."
+                ))
             } else {
-                finding.risk(Risk::Moderate).selected(false).explanation(
+                finding.risk(Risk::Moderate).selected(false).explanation(t!(
                     "Índices y caché de la versión del IDE que usas. Se regeneran solos, pero el IDE tendrá que volver a indexar tus proyectos, lo que puede llevar minutos.",
-                )
+                    "Indexes and cache of the IDE version you use. They regenerate on their own, but the IDE will have to reindex your projects, which can take minutes."
+                ))
             })
         })
         .collect();
@@ -355,16 +385,19 @@ fn ide_findings(ctx: &ScanContext, family: &IdeFamily) -> Vec<Finding> {
                         ID,
                         Area::Developer,
                         format!("ide_logs:{name}"),
-                        format!("Registros de {}", label(name)),
+                        tf!("Registros de {}", "{} logs", label(name)),
                     )
-                    .group("IDE de JetBrains y Android Studio")
+                    .group(group)
                     .trash(path)
                     .measured(&info)
                     .risk(Risk::Safe)
                     .recovery(Recovery::Automatic)
                     .selected(true)
                     .blocked_by(&[process(name).as_str()])
-                    .explanation("Registros del IDE. Solo sirven para investigar errores pasados."),
+                    .explanation(t!(
+                        "Registros del IDE. Solo sirven para investigar errores pasados.",
+                        "IDE logs. They are only useful for looking into past errors."
+                    )),
                 )
             })
             .collect::<Vec<_>>(),
@@ -381,9 +414,9 @@ fn ide_findings(ctx: &ScanContext, family: &IdeFamily) -> Vec<Finding> {
                 ID,
                 Area::Developer,
                 format!("ide_config:{name}"),
-                format!("Ajustes de {}", label(name)),
+                tf!("Ajustes de {}", "{} settings", label(name)),
             )
-            .group("IDE de JetBrains y Android Studio")
+            .group(group)
             .trash(path)
             .measured(&info)
             .risk(Risk::Review)
@@ -391,7 +424,10 @@ fn ide_findings(ctx: &ScanContext, family: &IdeFamily) -> Vec<Finding> {
             .selected(false)
             .blocked_by(&[process(name).as_str()])
             .tag("version_antigua")
-            .explanation("Ajustes y plugins de una versión del IDE que ya actualizaste. La versión nueva suele importarlos al actualizar, pero no se regeneran: revísalo antes de quitarlo."),
+            .explanation(t!(
+                "Ajustes y plugins de una versión del IDE que ya actualizaste. La versión nueva suele importarlos al actualizar, pero no se regeneran: revísalo antes de quitarlo.",
+                "Settings and plugins of an IDE version you have since updated. The new version usually imports them when it updates, but they don't regenerate: review them before removing them."
+            )),
         )
     }).collect::<Vec<_>>());
     found
@@ -462,8 +498,9 @@ fn avd_findings(ctx: &ScanContext, inventory: &AvdInventory) -> Vec<Finding> {
             if ini.is_file() {
                 targets.push(ini);
             }
+            let title = tf!("Emulador {name}", "Emulator {name}");
             Some(
-                Finding::new(ID, Area::Developer, format!("avd:{name}"), format!("Emulador {name}"))
+                Finding::new(ID, Area::Developer, format!("avd:{name}"), title)
                     .group("Android")
                     .subtitle(path.display().to_string())
                     .measured(&info)
@@ -472,7 +509,10 @@ fn avd_findings(ctx: &ScanContext, inventory: &AvdInventory) -> Vec<Finding> {
                     .selected(false)
                     .blocked_by(EMULATOR)
                     .action(Action::Trash { paths: targets })
-                    .explanation("Un dispositivo virtual de Android con sus apps, datos e instantáneas. Lo que hayas instalado o configurado en él se pierde al quitarlo."),
+                    .explanation(t!(
+                        "Un dispositivo virtual de Android con sus apps, datos e instantáneas. Lo que hayas instalado o configurado en él se pierde al quitarlo.",
+                        "An Android virtual device with its apps, data and snapshots. Anything you installed or set up on it is lost when it is removed."
+                    )),
             )
         })
         .collect()
@@ -499,7 +539,11 @@ fn system_image_findings(ctx: &ScanContext, inventory: &AvdInventory) -> Vec<Fin
             }
             let relative = path.strip_prefix(&sdk).ok()?.to_str()?.to_string();
             let parts: Vec<&str> = relative.split('/').skip(1).collect();
-            let title = format!("Imagen de sistema de Android: {}", parts.join(" · "));
+            let title = tf!(
+                "Imagen de sistema de Android: {}",
+                "Android system image: {}",
+                parts.join(" · ")
+            );
             let users = inventory.image_users.get(&relative);
             let finding = Finding::new(
                 ID,
@@ -514,13 +558,15 @@ fn system_image_findings(ctx: &ScanContext, inventory: &AvdInventory) -> Vec<Fin
             .selected(false)
             .blocked_by(EMULATOR_AND_STUDIO);
             Some(match users {
-                Some(users) => finding.risk(Risk::Review).tag("en_uso").explanation(format!(
+                Some(users) => finding.risk(Risk::Review).tag("en_uso").explanation(tf!(
                     "Sistema operativo del emulador. Lo usa {}, que no arrancará hasta que lo vuelvas a descargar desde el SDK Manager de Android Studio.",
+                    "The emulator's operating system. Used by {}, which won't start until you download it again from the SDK Manager in Android Studio.",
                     users.join(", ")
                 )),
-                None => finding.risk(Risk::Moderate).explanation(
+                None => finding.risk(Risk::Moderate).explanation(t!(
                     "Sistema operativo para emuladores, que ningún dispositivo virtual usa ahora. Se puede volver a descargar desde el SDK Manager de Android Studio.",
-                ),
+                    "An operating system for emulators that no virtual device uses right now. It can be downloaded again from the SDK Manager in Android Studio."
+                )),
             })
         })
         .collect()
@@ -529,7 +575,7 @@ fn system_image_findings(ctx: &ScanContext, inventory: &AvdInventory) -> Vec<Fin
 pub(super) struct ToolCacheScanner;
 
 fn findings(ctx: &ScanContext, has_tool: HasTool) -> Vec<Finding> {
-    let mut all = table_findings(ctx, ID, SPECS, has_tool);
+    let mut all = table_findings(ctx, ID, &specs(), has_tool);
     for editor in EDITORS {
         all.extend(editor_findings(ctx, editor));
     }
@@ -548,11 +594,14 @@ impl Scanner for ToolCacheScanner {
     }
 
     fn name(&self) -> &'static str {
-        "Herramientas de desarrollo"
+        t!("Herramientas de desarrollo", "Developer tools")
     }
 
     fn description(&self) -> &'static str {
-        "Cachés y registros de editores e IDE, navegadores de pruebas y emuladores de Android."
+        t!(
+            "Cachés y registros de editores e IDE, navegadores de pruebas y emuladores de Android.",
+            "Caches and logs of editors and IDEs, test browsers and Android emulators."
+        )
     }
 
     fn area(&self) -> Area {

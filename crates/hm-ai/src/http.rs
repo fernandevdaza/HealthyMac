@@ -7,6 +7,8 @@ use std::io::{self, ErrorKind, Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpStream};
 use std::time::{Duration, Instant};
 
+use hm_core::t;
+
 const CONNECT_TIMEOUT: Duration = Duration::from_millis(300);
 const REQUEST_TIMEOUT: Duration = Duration::from_millis(800);
 const MAX_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
@@ -47,16 +49,25 @@ pub(crate) fn get(port: u16, path: &str) -> io::Result<Response> {
         let remaining = deadline
             .checked_duration_since(Instant::now())
             .filter(|left| !left.is_zero())
-            .ok_or_else(|| io::Error::new(ErrorKind::TimedOut, "sin respuesta a tiempo"))?;
+            .ok_or_else(|| {
+                io::Error::new(
+                    ErrorKind::TimedOut,
+                    t!("sin respuesta a tiempo", "no response in time"),
+                )
+            })?;
         stream.set_read_timeout(Some(remaining))?;
         match stream.read(&mut chunk) {
             Ok(0) => {
-                return parse(&received, true)?.ok_or_else(|| invalid("respuesta incompleta"));
+                return parse(&received, true)?
+                    .ok_or_else(|| invalid(t!("respuesta incompleta", "incomplete response")));
             }
             Ok(read) => {
                 received.extend_from_slice(&chunk[..read]);
                 if received.len() > MAX_RESPONSE_BYTES {
-                    return Err(invalid("respuesta demasiado grande"));
+                    return Err(invalid(t!(
+                        "respuesta demasiado grande",
+                        "response too large"
+                    )));
                 }
                 if let Some(response) = parse(&received, false)? {
                     return Ok(response);
@@ -73,7 +84,10 @@ pub(crate) fn get(port: u16, path: &str) -> io::Result<Response> {
 fn parse(received: &[u8], at_eof: bool) -> io::Result<Option<Response>> {
     let Some(head_end) = received.windows(4).position(|window| window == b"\r\n\r\n") else {
         if received.len() > MAX_HEAD_BYTES {
-            return Err(invalid("cabeceras demasiado grandes"));
+            return Err(invalid(t!(
+                "cabeceras demasiado grandes",
+                "headers too large"
+            )));
         }
         return Ok(None);
     };
@@ -84,7 +98,7 @@ fn parse(received: &[u8], at_eof: bool) -> io::Result<Option<Response>> {
         .filter(|line| line.starts_with("HTTP/1."))
         .and_then(|line| line.split_whitespace().nth(1))
         .and_then(|code| code.parse::<u16>().ok())
-        .ok_or_else(|| invalid("línea de estado no válida"))?;
+        .ok_or_else(|| invalid(t!("línea de estado no válida", "invalid status line")))?;
 
     let mut content_length = None;
     let mut chunked = false;
@@ -127,10 +141,10 @@ fn decode_chunked(mut input: &[u8]) -> io::Result<Option<Vec<u8>>> {
         };
         let line = String::from_utf8_lossy(&input[..line_end]);
         let size = line.split(';').next().unwrap_or_default().trim();
-        let size =
-            usize::from_str_radix(size, 16).map_err(|_| invalid("tamaño de trozo no válido"))?;
+        let size = usize::from_str_radix(size, 16)
+            .map_err(|_| invalid(t!("tamaño de trozo no válido", "invalid chunk size")))?;
         if size > MAX_RESPONSE_BYTES {
-            return Err(invalid("trozo demasiado grande"));
+            return Err(invalid(t!("trozo demasiado grande", "chunk too large")));
         }
         input = &input[line_end + 2..];
         if size == 0 {

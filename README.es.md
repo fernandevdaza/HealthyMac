@@ -1,7 +1,7 @@
 <p align="right"><a href="README.md">English</a> · <b>Español</b></p>
 
 <p align="center">
-  <img src="docs/banner.es.png" alt="HealthyMac — Limpia tu Mac, sin engaños" width="100%">
+  <img src="docs/banner.es.png" alt="HealthyMac: Limpia tu Mac, sin engaños" width="100%">
 </p>
 
 <p align="center">
@@ -11,16 +11,17 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/versión-0.1.0-2dd4bf?style=flat-square" alt="versión 0.1.0">
-  <img src="https://img.shields.io/badge/tests-662-22c55e?style=flat-square" alt="662 tests">
-  <img src="https://img.shields.io/badge/runtimes%20de%20IA-14-8b5cf6?style=flat-square" alt="14 runtimes de IA">
-  <img src="https://img.shields.io/badge/páginas-12-f59e0b?style=flat-square" alt="12 páginas">
-  <img src="https://img.shields.io/badge/interfaz-español-60a5fa?style=flat-square" alt="Interfaz en español">
+  <img src="https://img.shields.io/badge/versión-0.1.0-6e6e73?style=flat-square&labelColor=3a3a3c" alt="versión 0.1.0">
+  <img src="https://img.shields.io/badge/tests-672%20pasan-248a3d?style=flat-square&labelColor=3a3a3c" alt="672 tests que pasan">
+  <img src="https://img.shields.io/badge/runtimes%20de%20IA-14-6e6e73?style=flat-square&labelColor=3a3a3c" alt="14 runtimes de IA">
+  <img src="https://img.shields.io/badge/páginas-12-6e6e73?style=flat-square&labelColor=3a3a3c" alt="12 páginas">
+  <img src="https://img.shields.io/badge/interfaz-español%20%7C%20inglés-6e6e73?style=flat-square&labelColor=3a3a3c" alt="Interfaz en español e inglés">
+  <img src="https://img.shields.io/badge/tema-claro%20%7C%20oscuro-6e6e73?style=flat-square&labelColor=3a3a3c" alt="Tema claro y oscuro">
   <br>
-  <img src="https://img.shields.io/badge/Rust-stable-ce422b?style=flat-square&logo=rust&logoColor=white" alt="Rust">
-  <img src="https://img.shields.io/badge/GPUI-Metal-5eead4?style=flat-square" alt="GPUI sobre Metal">
-  <img src="https://img.shields.io/badge/macOS-Apple%20Silicon-111827?style=flat-square&logo=apple&logoColor=white" alt="macOS en Apple Silicon">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/licencia-GPL--3.0-94a3b8?style=flat-square" alt="Licencia GPL-3.0"></a>
+  <img src="https://img.shields.io/badge/Rust-stable-6e6e73?style=flat-square&labelColor=3a3a3c&logo=rust&logoColor=white" alt="Rust">
+  <img src="https://img.shields.io/badge/GPUI-Metal-6e6e73?style=flat-square&labelColor=3a3a3c" alt="GPUI sobre Metal">
+  <img src="https://img.shields.io/badge/macOS-Apple%20Silicon-6e6e73?style=flat-square&labelColor=3a3a3c&logo=apple&logoColor=white" alt="macOS en Apple Silicon">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/licencia-GPL--3.0-6e6e73?style=flat-square&labelColor=3a3a3c" alt="Licencia GPL-3.0"></a>
 </p>
 
 <p align="center">
@@ -33,7 +34,7 @@
 
 <div align="center">
 
-| **Tamaños reales** | **14 runtimes de IA** | **Primero a la Papelera** | **662 tests** | **12 MB** |
+| **Tamaños reales** | **14 runtimes de IA** | **Primero a la Papelera** | **672 tests** | **12 MB** |
 |:---:|:---:|:---:|:---:|:---:|
 | cuenta los clones APFS y los enlaces duros | un solo inventario, comparado con el límite de memoria de Metal | cada ruta se revalida justo antes de actuar | seguridad, escáneres y analizadores | ~1 % de CPU y ~100 MB de RAM en reposo |
 
@@ -70,27 +71,30 @@
 - **Mapa de disco y monitor.** Un treemap navegable, además de CPU, memoria, red, temperatura, batería y procesos.
 - **Apps y arranque.** Tamaño, restos y arquitectura de cada app, un desinstalador, y los elementos de arranque con los
   huérfanos marcados.
+- **Se ve como una app de Mac.** Grises neutros y SF Pro; el color aparece solo cuando dice algo, como un nivel de
+  riesgo, la presión de memoria o una serie en un gráfico. Claro u oscuro, español o inglés: sigue a macOS (si no está
+  en español, se muestra en inglés), o lo eliges en Ajustes.
 - **Línea de comandos.** `healthymac scan --json` y compañía, para tus scripts.
 
 ## 📸 Capturas
 
-<sub>Modo demo: todos los datos son inventados.</sub>
+<sub>Modo demo: todos los datos son inventados. Las imágenes siguen el tema de GitHub, claro u oscuro.</sub>
 
 <table>
   <tr>
-    <td colspan="2"><img src="docs/screenshots/overview.jpg" alt="Resumen"><p align="center"><sub><b>Resumen</b> · puntuación de salud con sus motivos, uso del disco por área y lo que puedes recuperar</sub></p></td>
+    <td colspan="2"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/overview-es-dark.jpg"><img src="docs/screenshots/overview-es-light.jpg" alt="Resumen"></picture><p align="center"><sub><b>Resumen</b> · puntuación de salud con sus motivos, uso del disco por área y lo que puedes recuperar</sub></p></td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/screenshots/models.jpg" alt="Modelos"><p align="center"><sub><b>Modelos</b> · presupuesto de memoria, runtimes en marcha y copias repetidas</sub></p></td>
-    <td width="50%"><img src="docs/screenshots/developer.jpg" alt="Developer"><p align="center"><sub><b>Developer</b> · Xcode, cachés de paquetes y compilaciones de proyectos parados</sub></p></td>
+    <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/models-es-dark.jpg"><img src="docs/screenshots/models-es-light.jpg" alt="Modelos"></picture><p align="center"><sub><b>Modelos</b> · presupuesto de memoria, runtimes en marcha y copias repetidas</sub></p></td>
+    <td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/developer-es-dark.jpg"><img src="docs/screenshots/developer-es-light.jpg" alt="Developer"></picture><p align="center"><sub><b>Developer</b> · Xcode, cachés de paquetes y compilaciones de proyectos parados</sub></p></td>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/review.jpg" alt="Revisión antes de limpiar"><p align="center"><sub><b>Revisión</b> · qué va a la Papelera, qué se libera ahora y qué se queda</sub></p></td>
-    <td><img src="docs/screenshots/disk-map.jpg" alt="Mapa de disco"><p align="center"><sub><b>Mapa de disco</b> · haz clic en una carpeta para entrar</sub></p></td>
+    <td><picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/review-es-dark.jpg"><img src="docs/screenshots/review-es-light.jpg" alt="Revisión antes de limpiar"></picture><p align="center"><sub><b>Revisión</b> · qué va a la Papelera, qué se libera ahora y qué se queda</sub></p></td>
+    <td><picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/disk-map-es-dark.jpg"><img src="docs/screenshots/disk-map-es-light.jpg" alt="Mapa de disco"></picture><p align="center"><sub><b>Mapa de disco</b> · haz clic en una carpeta para entrar</sub></p></td>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/projects.jpg" alt="Proyectos"><p align="center"><sub><b>Proyectos</b> · actividad, artefactos, estado de git y Docker</sub></p></td>
-    <td><img src="docs/screenshots/monitor.jpg" alt="Monitor"><p align="center"><sub><b>Monitor</b> · CPU, memoria, red, temperatura y batería en directo</sub></p></td>
+    <td><picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/projects-es-dark.jpg"><img src="docs/screenshots/projects-es-light.jpg" alt="Proyectos"></picture><p align="center"><sub><b>Proyectos</b> · actividad, artefactos, estado de git y Docker</sub></p></td>
+    <td><picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/monitor-es-dark.jpg"><img src="docs/screenshots/monitor-es-light.jpg" alt="Monitor"></picture><p align="center"><sub><b>Monitor</b> · CPU, memoria, red, temperatura y batería en directo</sub></p></td>
   </tr>
 </table>
 
@@ -154,8 +158,9 @@ cargo test --workspace
 | `hm-system` | 215 | Escáneres, guardas de permisos, puntuación de salud, árbol de disco, analizadores del monitor |
 | `hm-ai` | 192 | Lectura de GGUF, almacenes de modelos, encaje en memoria, duplicados, runtimes |
 | `hm-dev` | 154 | Reglas de artefactos y actividad de proyectos, cachés de paquetes, Docker, puertos |
-| `hm-core` | 67 | Política de seguridad, limpiador, tamaños APFS, clonado |
-| `hm-app` | 34 | Lógica de selección, disposición del treemap |
+| `hm-core` | 72 | Política de seguridad, limpiador, tamaños APFS, clonado, la macro `t!` |
+| `hm-app` | 38 | Lógica de selección, disposición del treemap, agrupación de listas, recorte de textos |
+| `hm-cli` | 1 | Idioma según la configuración regional |
 
 Otros dos tests usan la Papelera real, y están ignorados por defecto porque dejan archivos diminutos en ella.
 
@@ -165,8 +170,7 @@ Otros dos tests usan la Papelera real, y están ignorados por defecto porque dej
 **Probado solo con datos de prueba:** desinstalar una app, `ollama rm`, el modo con Acceso total al disco, y los almacenes
 de Ollama, Jan, GPT4All, ComfyUI, Automatic1111 y Draw Things.
 
-**Sin probar:** otras versiones de macOS (declara 13+) y otros Macs. Todavía no hay tema claro, y la interfaz solo está en
-español.
+**Sin probar:** otras versiones de macOS (declara 13+) y otros Macs.
 
 ## 🛠️ Desarrollo
 
@@ -191,13 +195,16 @@ crates/
   hm-app/     la app de escritorio, hecha con GPUI
 ```
 
-Las reglas y la estructura están en [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Para detectar diálogos de permisos, lanza
-la app con `open`: desde una terminal, macOS atribuye el acceso a la terminal y el problema no se ve.
+Las reglas y la estructura están en [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), y el diseño visual en
+[docs/DESIGN.md](docs/DESIGN.md). Para detectar diálogos de permisos, lanza la app con `open`: desde una terminal,
+macOS atribuye el acceso a la terminal y el problema no se ve. `HEALTHYMAC_LANG=en|es` y
+`HEALTHYMAC_THEME=light|dark` fuerzan un idioma o un tema sin tocar tus ajustes.
 
 ## 🤝 Contribuir
 
 Las contribuciones son bienvenidas, sobre todo informes desde otros Macs y versiones de macOS, herramientas y runtimes
-nuevos, y una interfaz en inglés. Issues y pull requests en español o inglés.
+nuevos, y más idiomas. Cada texto se escribe con `t!("español", "English")`; mira [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Issues y pull requests en español o inglés.
 
 ## 📄 Licencia
 

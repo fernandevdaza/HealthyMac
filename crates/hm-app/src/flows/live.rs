@@ -94,13 +94,12 @@ impl Shell {
         let Some(snapshot) = &self.live.snapshot else {
             return;
         };
+        // The same count the real score uses, so the demo's numbers agree with the rest of the page.
+        let reclaimable = hm_system::health::reclaimable_bytes(&self.findings);
         let report = if self.mode.demo {
-            crate::demo::system::health(self.reclaimable_total())
+            crate::demo::system::health(reclaimable)
         } else {
-            hm_system::health::compute(
-                snapshot,
-                hm_system::health::reclaimable_bytes(&self.findings),
-            )
+            hm_system::health::compute(snapshot, reclaimable)
         };
         let score = report.score as f32;
         if self.live.health.is_none() || (score - self.live.ring_to).abs() >= 1.0 {

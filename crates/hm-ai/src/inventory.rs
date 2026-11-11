@@ -7,7 +7,7 @@ use std::time::SystemTime;
 
 use anyhow::Result;
 use hm_core::fsutil::{clone_id, measure, measure_many, CancelToken};
-use hm_core::{Action, Area, Finding, Recovery, Risk, ScanContext};
+use hm_core::{t, tf, Action, Area, Finding, Recovery, Risk, ScanContext};
 
 use crate::duplicates::{self, MIN_DUPLICATE_BYTES};
 use crate::files::{name_of, relative, unique_bytes, walk, FileRec};
@@ -659,8 +659,11 @@ pub(crate) fn removal_plan(model: &LocalModel) -> RemovalPlan {
                     action: Action::ReportOnly,
                     size: 0,
                     items: 1,
-                    explanation: "Su nombre no es válido para `ollama rm`. Elimínalo desde Ollama."
-                        .to_string(),
+                    explanation: t!(
+                        "Su nombre no es válido para `ollama rm`. Elimínalo desde Ollama.",
+                        "Its name isn't valid for `ollama rm`. Remove it from Ollama."
+                    )
+                    .to_string(),
                 };
             }
             RemovalPlan {
@@ -670,10 +673,15 @@ pub(crate) fn removal_plan(model: &LocalModel) -> RemovalPlan {
                 },
                 size: model.size.saturating_sub(model.shared_bytes),
                 items: 1,
-                explanation: "Se elimina con `ollama rm`, que respeta las capas compartidas con otros \
-                              modelos: solo se libera lo que usa este en exclusiva. Ollama tiene que \
-                              estar abierto. Se puede volver a descargar con `ollama pull`."
-                    .to_string(),
+                explanation: t!(
+                    "Se elimina con `ollama rm`, que respeta las capas compartidas con otros \
+                     modelos: solo se libera lo que usa este en exclusiva. Ollama tiene que \
+                     estar abierto. Se puede volver a descargar con `ollama pull`.",
+                    "It's removed with `ollama rm`, which keeps the layers shared with other \
+                     models: only what this one uses alone is freed. Ollama has to be open. You \
+                     can download it again with `ollama pull`."
+                )
+                .to_string(),
             }
         }
         RuntimeKind::HuggingFace | RuntimeKind::LlamaCpp | RuntimeKind::OMlx
@@ -684,11 +692,15 @@ pub(crate) fn removal_plan(model: &LocalModel) -> RemovalPlan {
                 items: model.files.len() as u64,
                 action: Action::Trash { paths },
                 size,
-                explanation:
+                explanation: t!(
                     "Va a la Papelera la carpeta del modelo en la caché de Hugging Face, junto \
-                              con los datos que no comparte con otros repositorios. Se vuelve a \
-                              descargar la próxima vez que algo lo pida."
-                        .to_string(),
+                     con los datos que no comparte con otros repositorios. Se vuelve a \
+                     descargar la próxima vez que algo lo pida.",
+                    "The model's folder in the Hugging Face cache goes to the Trash, along with \
+                     the data it doesn't share with other repositories. It's downloaded again the \
+                     next time something asks for it."
+                )
+                .to_string(),
             }
         }
         runtime => {
@@ -698,12 +710,18 @@ pub(crate) fn removal_plan(model: &LocalModel) -> RemovalPlan {
                 size: measure_many(&paths, &cancel).bytes,
                 action: Action::Trash { paths },
                 explanation: if runtime == RuntimeKind::Other {
-                    "Lo guardó otro programa y HealthyMac no sabe de cuál, ni si es una descarga o algo que \
-                     costó tiempo generar. Va a la Papelera: compruébalo antes de vaciarla."
-                        .to_string()
+                    t!(
+                        "Lo guardó otro programa y HealthyMac no sabe de cuál, ni si es una descarga o algo que \
+                         costó tiempo generar. Va a la Papelera: compruébalo antes de vaciarla.",
+                        "Another app saved it, and HealthyMac doesn't know which one, or whether it's a \
+                         download or something that took time to generate. It goes to the Trash: check it \
+                         before you empty the Trash."
+                    )
+                    .to_string()
                 } else {
-                    format!(
+                    tf!(
                         "Va a la Papelera. Para usarlo otra vez habrá que volver a descargarlo desde {}.",
+                        "It goes to the Trash. To use it again, you'll have to download it from {} again.",
                         runtime.label()
                     )
                 },

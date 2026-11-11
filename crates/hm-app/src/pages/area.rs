@@ -1,28 +1,45 @@
 //! The findings of one area: grouped, selectable and explained.
 
 use gpui::{
-    div, list, prelude::*, px, AnyElement, Context, ElementId, FontWeight, SharedString, Window,
+    div, list, prelude::*, px, AnimationExt, AnyElement, Context, ElementId, FontWeight,
+    SharedString, Window,
 };
 use hm_core::fmt::{human_age, human_size};
-use hm_core::{Area, Finding};
+use hm_core::{t, tf, Area, Finding};
 
-use super::{content_width, plural};
+use super::{content_width, plural, FULL_DISK_ACCESS_URL};
 use crate::assets::Icon;
-use crate::logic::selection::{is_actionable, GroupState};
-use crate::state::{FindingRow, Shell};
+use crate::logic::selection::{is_actionable, needs_full_disk_access, GroupState};
+use crate::state::{FindingRow, Heading, Shell};
 use crate::theme::{self, font, radius, sp, GUTTER};
-use crate::ui::chrome::{big_number, empty_state, page_header};
+use crate::ui::chrome::{big_number, empty_state, notice, page_header, NoticeKind};
 use crate::ui::controls::{checkbox, pill, tag, Btn, BtnSize};
+use crate::ui::motion;
 use crate::ui::scrollbar::{scrollbar, ScrollSource};
 use crate::ui::{clip, clip_middle, col, icon, row, TextExt};
 
 pub fn area_blurb(area: Area) -> &'static str {
     match area {
-        Area::System => "Cachés, registros y restos que macOS y tus apps van dejando atrás.",
-        Area::Developer => "Lo que tus herramientas acumulan: casi todo se regenera al compilar.",
-        Area::LocalAi => "Cachés de modelos, duplicados y restos de experimentos.",
-        Area::Apps => "Restos de apps que ya no están en tu Mac.",
-        Area::Files => "Archivos grandes y descargas viejas. Aquí mandas tú: mira antes de borrar.",
+        Area::System => t!(
+            "Cachés, registros y restos que macOS y tus apps van dejando atrás.",
+            "Caches, logs and leftovers that macOS and your apps leave behind."
+        ),
+        Area::Developer => t!(
+            "Lo que tus herramientas acumulan: casi todo se regenera al compilar.",
+            "What your tools pile up. Nearly all of it is rebuilt when you compile."
+        ),
+        Area::LocalAi => t!(
+            "Cachés de modelos, duplicados y restos de experimentos.",
+            "Model caches, duplicates and leftovers from experiments."
+        ),
+        Area::Apps => t!(
+            "Restos de apps que ya no están en tu Mac.",
+            "Leftovers from apps that are no longer on your Mac."
+        ),
+        Area::Files => t!(
+            "Archivos grandes y descargas viejas. Aquí mandas tú: mira antes de borrar.",
+            "Large files and old downloads. You decide here: look before you delete."
+        ),
     }
 }
 
@@ -45,9 +62,9 @@ impl Shell {
     pub fn rescan_button(&mut self, cx: &mut Context<Self>) -> AnyElement {
         if self.scan.running {
             Btn::secondary(if self.scan.cancelling {
-                "Cancelando…"
+                t!("Cancelando…", "Canceling…")
             } else {
-                "Cancelar escaneo"
+                t!("Cancelar escaneo", "Cancel scan")
             })
             .icon(Icon::Stop)
             .disabled(self.scan.cancelling)
@@ -55,9 +72,9 @@ impl Shell {
             .into_any_element()
         } else {
             Btn::secondary(if self.scan.finished_once {
-                "Escanear de nuevo"
+                t!("Escanear de nuevo", "Scan again")
             } else {
-                "Escanear"
+                t!("Escanear", "Scan")
             })
             .icon(if self.scan.finished_once {
                 Icon::Refresh
@@ -76,7 +93,7 @@ impl Shell {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let accent = theme::area_color(area);
+        let accent = theme::text_2();
         let view = self.views.entry(area).or_default();
         if view.rows.is_empty() {
             if self.scan.running {
@@ -91,17 +108,23 @@ impl Shell {
             }
             let (title, message) = if self.scan.finished_once {
                 (
-                    "Por aquí todo limpio",
-                    "El último escaneo no ha encontrado nada en esta sección. Buenas noticias.",
+                    t!("Por aquí todo limpio", "All clean here"),
+                    t!(
+                        "El último escaneo no ha encontrado nada en esta sección. Buenas noticias.",
+                        "The last scan found nothing in this section. Good news."
+                    ),
                 )
             } else {
                 (
-                    "Todavía no hemos mirado",
-                    "Escanea y te contaremos qué hay, cuánto ocupa y qué pasa si lo quitas. No se toca nada hasta que tú lo digas.",
+                    t!("Todavía no hemos mirado", "We haven't looked yet"),
+                    t!(
+                        "Escanea y te contaremos qué hay, cuánto ocupa y qué pasa si lo quitas. No se toca nada hasta que tú lo digas.",
+                        "Scan and we'll tell you what's here, how much space it takes and what happens if you remove it. Nothing is touched until you say so."
+                    ),
                 )
             };
             let action = (!self.scan.finished_once).then(|| {
-                Btn::primary("Escanear", theme::area_stops(area))
+                Btn::primary(t!("Escanear", "Scan"))
                     .size(BtnSize::Lg)
                     .icon(Icon::Scan)
                     .build(
@@ -115,7 +138,15 @@ impl Shell {
             } else {
                 Icon::Scan
             };
-            return empty_state(which, accent, title, message, action).into_any_element();
+            let empty = empty_state(which, accent, title, message, action);
+            return match self.access_notice(area, cx) {
+                Some(access) => col()
+                    .size_full()
+                    .child(div().flex_none().px(px(GUTTER)).child(access))
+                    .child(empty)
+                    .into_any_element(),
+                None => empty.into_any_element(),
+            };
         }
 
         let list_state = view.list.clone();
@@ -128,6 +159,7 @@ impl Shell {
         let total = available.bytes;
         let actionable = available.count;
         let state = self.selection.state_of(members.iter().copied());
+        let access = self.access_notice(area, cx);
 
         col()
             .flex_1()
@@ -149,23 +181,28 @@ impl Shell {
                             clip()
                                 .fs(font::CAPTION)
                                 .text_color(theme::text_2())
-                                .child(format!(
+                                .child(tf!(
                                     "{}se pueden recuperar, en {}",
+                                    "{}can be freed up across {}",
                                     if available.is_lower_bound() {
-                                        "como mínimo "
+                                        t!("como mínimo ", "or more ")
                                     } else {
                                         ""
                                     },
-                                    plural(actionable, "hallazgo", "hallazgos")
+                                    plural(
+                                        actionable,
+                                        t!("hallazgo", "item"),
+                                        t!("hallazgos", "items")
+                                    )
                                 )),
                         ),
                     )
                     .child(
                         div().pb(sp(1.)).child(
                             Btn::ghost(if state == GroupState::All {
-                                "Quitar todo"
+                                t!("Quitar todo", "Deselect all")
                             } else {
-                                "Elegir todo"
+                                t!("Elegir todo", "Select all")
                             })
                             .size(BtnSize::Sm)
                             .disabled(state == GroupState::Unavailable)
@@ -178,6 +215,9 @@ impl Shell {
                         ),
                     ),
             )
+            .when_some(access, |this, access| {
+                this.child(div().flex_none().px(px(GUTTER)).pb(sp(3.)).child(access))
+            })
             .child(
                 div()
                     .relative()
@@ -200,6 +240,51 @@ impl Shell {
                 this.child(self.render_selection_bar(Some(area), summary, cx))
             })
             .into_any_element()
+    }
+
+    /// One notice for every part of this area a scanner skipped for lack of Full Disk Access, with
+    /// the way to grant it. `None` when nothing was skipped.
+    fn access_notice(&self, area: Area, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let skipped: Vec<&Finding> = self
+            .findings
+            .iter()
+            .filter(|f| f.area == area && needs_full_disk_access(f))
+            .collect();
+        let detail = match skipped.as_slice() {
+            [] => return None,
+            [only] if !only.explanation.is_empty() => only.explanation.clone(),
+            _ => {
+                let mut names: Vec<String> = skipped
+                    .iter()
+                    .map(|f| self.scanner_name(&f.scanner_id))
+                    .collect();
+                names.dedup();
+                tf!(
+                    "Sin ese permiso, parte de {} se queda fuera del escaneo. Se concede en Ajustes del Sistema y se puede retirar cuando quieras.",
+                    "Without that permission, part of {} is left out of the scan. You grant it in System Settings and can take it back at any time.",
+                    join_names(&names)
+                )
+            }
+        };
+        let open = Btn::secondary(t!("Abrir Ajustes", "Open Settings"))
+            .size(BtnSize::Sm)
+            .icon(Icon::External)
+            .build(
+                "area-fda-open",
+                cx.listener(|_, _, _, cx| cx.open_url(FULL_DISK_ACCESS_URL)),
+            );
+        Some(
+            notice(
+                NoticeKind::Info,
+                t!(
+                    "Falta el Acceso total al disco",
+                    "Full Disk Access is missing"
+                ),
+                Some(detail.into()),
+                Some(open.into_any_element()),
+            )
+            .into_any_element(),
+        )
     }
 
     fn toggle_all_in_area(&mut self, area: Area, cx: &mut Context<Self>) {
@@ -235,7 +320,6 @@ impl Shell {
         else {
             return div().into_any_element();
         };
-        let accent = theme::area_color(area);
         match row_data {
             FindingRow::Scanner {
                 scanner_id,
@@ -268,7 +352,6 @@ impl Shell {
                         checkbox(
                             ElementId::NamedInteger("scanner-check".into(), row_index as u64),
                             state,
-                            accent,
                             cx.listener(move |this, _, _, cx| {
                                 this.toggle_members(&group_members, cx)
                             }),
@@ -331,7 +414,6 @@ impl Shell {
                         checkbox(
                             ElementId::NamedInteger("group-check".into(), row_index as u64),
                             state,
-                            accent,
                             cx.listener(move |this, _, _, cx| {
                                 this.toggle_members(&group_members, cx)
                             }),
@@ -357,8 +439,8 @@ impl Shell {
                     )
                     .into_any_element()
             }
-            FindingRow::Item { index } => {
-                self.render_finding_item(area, row_index, index, window, cx)
+            FindingRow::Item { index, heading } => {
+                self.render_finding_item(area, row_index, index, heading, window, cx)
             }
             FindingRow::Gap => div().h(px(8.)).into_any_element(),
         }
@@ -369,12 +451,26 @@ impl Shell {
         area: Area,
         row_index: usize,
         index: usize,
+        heading: Option<Heading>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let finding = &self.findings[index];
-        let accent = theme::area_color(area);
-        let nested = finding.group.is_some();
+        let stands_for_scanner = heading == Some(Heading::Scanner);
+        let nested = finding.group.is_some() && !stands_for_scanner;
+        // A lone item takes its group's name, or keeps its own and says which scanner found it.
+        let title: SharedString = match &heading {
+            Some(Heading::Group(name)) => name.clone().into(),
+            _ => finding.title.clone().into(),
+        };
+        let context = if stands_for_scanner {
+            let name = self.scanner_name(&finding.scanner_id);
+            let (lower_name, lower_title) = (name.to_lowercase(), finding.title.to_lowercase());
+            let repeats = lower_name.contains(&lower_title) || lower_title.contains(&lower_name);
+            (!repeats).then_some(name)
+        } else {
+            None
+        };
         let view = &self.views[&area];
         let expanded = view.expanded.contains(&finding.id);
         let actionable = is_actionable(finding);
@@ -385,13 +481,19 @@ impl Shell {
             .last_used
             .map(|when| human_age(when, std::time::SystemTime::now()));
         let subtitle: SharedString = finding.subtitle.clone().unwrap_or_default().into();
-        let shared = (finding.shared_bytes > 0)
-            .then(|| format!("+{} compartidos", human_size(finding.shared_bytes)));
+        let shared = (finding.shared_bytes > 0).then(|| {
+            tf!(
+                "+{} compartidos",
+                "+{} shared",
+                human_size(finding.shared_bytes)
+            )
+        });
         let toggle_id = id.clone();
         let risk_color = theme::risk_color(finding.risk);
 
         col()
             .w_full()
+            .when(stands_for_scanner, |this| this.pt(sp(2.)))
             .pl(px(if nested { GUTTER + 12.0 } else { GUTTER - 4.0 }))
             .pr(px(GUTTER - 4.0))
             .child(
@@ -412,7 +514,6 @@ impl Shell {
                                     } else {
                                         GroupState::None
                                     },
-                                    accent,
                                     cx.listener(move |this, _, _, cx| {
                                         if let Some(finding) = this.findings.get(index) {
                                             this.selection.toggle(finding);
@@ -453,16 +554,30 @@ impl Shell {
                                             .child(
                                                 clip()
                                                     .fs(font::BODY)
+                                                    .when(stands_for_scanner, |this| {
+                                                        this.font_weight(FontWeight::SEMIBOLD)
+                                                    })
                                                     .text_color(theme::text_1())
-                                                    .child(finding.title.clone()),
+                                                    .child(title),
                                             )
                                             .when(
-                                                !subtitle.is_empty() || shared.is_some(),
+                                                !subtitle.is_empty()
+                                                    || shared.is_some()
+                                                    || context.is_some(),
                                                 |this| {
                                                     this.child(
                                                         row()
                                                             .w_full()
                                                             .gap(sp(2.))
+                                                            .when_some(context, |this, context| {
+                                                                this.child(
+                                                                    div()
+                                                                        .flex_none()
+                                                                        .fs(font::MICRO)
+                                                                        .text_color(theme::text_2())
+                                                                        .child(context),
+                                                                )
+                                                            })
                                                             .when(!subtitle.is_empty(), |this| {
                                                                 this.child(
                                                                     clip_middle()
@@ -508,7 +623,7 @@ impl Shell {
                                             pill(finding.risk.label(), risk_color)
                                                 .into_any_element()
                                         } else {
-                                            tag("Aviso").into_any_element()
+                                            tag(t!("Aviso", "Note")).into_any_element()
                                         },
                                     ))
                                     .child(
@@ -541,7 +656,13 @@ impl Shell {
                                     )),
                             ),
                     )
-                    .when(expanded, |this| this.child(finding_details(finding))),
+                    .when(expanded, |this| {
+                        this.child(div().child(finding_details(finding)).with_animation(
+                            ElementId::NamedInteger("details".into(), row_index as u64),
+                            motion::animation(motion::pace::QUICK),
+                            |this, t| this.opacity(t),
+                        ))
+                    }),
             )
             .into_any_element()
     }
@@ -561,12 +682,21 @@ impl Shell {
 /// The expanded part of a row: what it is, what happens if it goes, and how it comes back.
 fn finding_details(finding: &Finding) -> impl IntoElement {
     let explanation = if finding.explanation.is_empty() {
-        "Sin más detalles sobre este elemento.".to_string()
+        t!(
+            "Sin más detalles sobre este elemento.",
+            "No more details about this item."
+        )
+        .to_string()
     } else {
         finding.explanation.clone()
     };
-    let items = (finding.item_count > 0)
-        .then(|| plural(finding.item_count as usize, "archivo", "archivos"));
+    let items = (finding.item_count > 0).then(|| {
+        plural(
+            finding.item_count as usize,
+            t!("archivo", "file"),
+            t!("archivos", "files"),
+        )
+    });
     col()
         .pl(sp(8.))
         .pr(sp(8.))
@@ -583,8 +713,9 @@ fn finding_details(finding: &Finding) -> impl IntoElement {
                 div()
                     .fs(font::CAPTION)
                     .text_color(theme::text_2())
-                    .child(format!(
+                    .child(tf!(
                         "Limpiarlo libera {}. Otros {} están compartidos con otra carpeta, como la caché de uv o el almacén de pnpm, así que esos bloques siguen en el disco.",
+                        "Cleaning it frees {}. Another {} is shared with another folder, such as the uv cache or the pnpm store, so those blocks stay on disk.",
                         human_size(finding.size),
                         human_size(finding.shared_bytes)
                     )),
@@ -600,9 +731,22 @@ fn finding_details(finding: &Finding) -> impl IntoElement {
                 .when_some(items, |this, items| this.child(tag(items)))
                 .when(!finding.blocked_by.is_empty(), |this| {
                     this.child(pill(
-                        format!("No se limpia con {} abierto", finding.blocked_by.join(" o ")),
+                        tf!(
+                            "No se limpia con {} abierto",
+                            "Can't clean while {} is open",
+                            finding.blocked_by.join(t!(" o ", " or "))
+                        ),
                         theme::amber(),
                     ))
                 }),
         )
+}
+
+/// "A", "A y B", "A, B y C".
+fn join_names(names: &[String]) -> String {
+    match names {
+        [] => String::new(),
+        [only] => only.clone(),
+        [rest @ .., last] => tf!("{} y {last}", "{} and {last}", rest.join(", ")),
+    }
 }

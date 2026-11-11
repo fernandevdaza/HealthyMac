@@ -138,7 +138,7 @@ pub struct HealthFactor {
 pub struct HealthReport {
     /// 0 to 100.
     pub score: u8,
-    /// "Excelente", "Buena", "Regular" or "Atención".
+    /// "Excelente", "Buena", "Regular" or "Atención", or their English versions.
     pub label: String,
     /// Worst first.
     pub factors: Vec<HealthFactor>,
@@ -179,7 +179,8 @@ pub enum AppArch {
 pub struct Leftover {
     pub path: PathBuf,
     pub size: u64,
-    /// Where it was found, in Spanish: "Caché", "Preferencias", "Soporte de aplicación"...
+    /// Where it was found, in the current language: "Caché", "Preferencias", "Soporte de
+    /// aplicación"...
     pub kind: String,
 }
 
@@ -200,9 +201,9 @@ pub struct AppInfo {
     /// `CFBundleExecutable`: the process name to check before touching the app. It often differs
     /// from `name` (Steam runs as `steam_osx`).
     pub executable: Option<String>,
-    /// Why HealthyMac cannot uninstall this app, in Spanish, ready to show. The UI should disable the
-    /// button rather than offer something that can only fail: besides system apps, this covers apps
-    /// inside a vendor folder and bundles owned by root.
+    /// Why HealthyMac cannot uninstall this app, in the current language, ready to show. The UI
+    /// should disable the button rather than offer something that can only fail: besides system
+    /// apps, this covers apps inside a vendor folder and bundles owned by root.
     ///
     /// `None` means nothing rules it out, not that it will work. macOS's App Management protection
     /// can still refuse a signed app, and that cannot be checked without asking TCC, which a scan

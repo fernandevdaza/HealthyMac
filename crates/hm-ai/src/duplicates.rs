@@ -20,7 +20,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 
 use hm_core::fsutil::{self, clone_id, private_size};
-use hm_core::{Action, Area, Finding, Recovery, Risk, SafetyPolicy, ScanContext};
+use hm_core::{t, tf, Action, Area, Finding, Recovery, Risk, SafetyPolicy, ScanContext};
 use rayon::prelude::*;
 
 use crate::files::{name_of, FileRec};
@@ -242,14 +242,21 @@ fn build_finding(
         .collect::<Vec<_>>()
         .join(" · ");
     let copies = group.paths.len();
-    Finding::new(SCANNER_ID, Area::LocalAi, id_key, format!("{copies} copias idénticas: {names}"))
-        .group("Deduplicación")
+    let title = tf!(
+        "{copies} copias idénticas: {names}",
+        "{copies} identical copies: {names}"
+    );
+    Finding::new(SCANNER_ID, Area::LocalAi, id_key, title)
+        .group(t!("Deduplicación", "Deduplication"))
         .subtitle(keep.display().to_string())
-        .explanation(format!(
+        .explanation(tf!(
             "Estas {copies} rutas contienen exactamente los mismos bytes ({file_name}). Al deduplicar \
              se convierten en clones APFS: cada programa sigue encontrando su archivo donde estaba y \
              solo se liberan los bloques repetidos. HealthyMac vuelve a comparar el contenido antes de \
-             tocar nada."
+             tocar nada.",
+            "These {copies} paths hold exactly the same bytes ({file_name}). Deduplicating turns them \
+             into APFS clones: every app still finds its file where it was, and only the repeated \
+             blocks are freed. HealthyMac compares the contents again before touching anything."
         ))
         .size(group.reclaimable)
         .items(duplicates.len() as u64)

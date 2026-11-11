@@ -22,7 +22,8 @@ use anyhow::Result;
 use hm_core::fmt::{human_age, human_size};
 use hm_core::fsutil;
 use hm_core::{
-    Action, Area, Finding, Recovery, Risk, SafetyPolicy, SafetyViolation, ScanContext, Scanner,
+    t, tf, Action, Area, Finding, Recovery, Risk, SafetyPolicy, SafetyViolation, ScanContext,
+    Scanner,
 };
 
 use crate::duplicates;
@@ -80,10 +81,67 @@ enum Kind {
     Protected,
 }
 
+impl Kind {
+    /// In the language current when asked, not when the scanner was made.
+    fn name(self) -> &'static str {
+        match self {
+            Kind::Duplicates => t!("Modelos duplicados", "Duplicate models"),
+            Kind::Abandoned => t!("Descargas abandonadas", "Abandoned downloads"),
+            Kind::Orphans => t!("Datos huérfanos de modelos", "Orphaned model data"),
+            Kind::Stale => t!("Modelos sin usar", "Unused models"),
+            Kind::TooLarge => t!(
+                "Modelos que no caben en este Mac",
+                "Models too big for this Mac"
+            ),
+            Kind::Broken => t!("Modelos incompletos", "Incomplete models"),
+            Kind::Caches => t!("Cachés de IA", "AI caches"),
+            Kind::Protected => t!(
+                "Modelos en carpetas protegidas",
+                "Models in protected folders"
+            ),
+        }
+    }
+
+    fn description(self) -> &'static str {
+        match self {
+            Kind::Duplicates => t!(
+                "Los mismos pesos guardados por varios programas. Se convierten en clones APFS sin romper ninguno.",
+                "The same weights stored by several apps. They're turned into APFS clones without breaking any of them."
+            ),
+            Kind::Abandoned => t!(
+                "Descargas de modelos a medias que llevan al menos una semana sin avanzar.",
+                "Unfinished model downloads that haven't made progress in at least a week."
+            ),
+            Kind::Orphans => t!(
+                "Capas y revisiones antiguas que ningún modelo instalado usa ya.",
+                "Layers and old revisions that no installed model uses anymore."
+            ),
+            Kind::Stale => t!(
+                "Modelos que su propio programa registra como sin cargar desde hace más de 90 días.",
+                "Models their own app records as not loaded in more than 90 days."
+            ),
+            Kind::TooLarge => t!(
+                "Modelos que necesitan más memoria de la que tiene este equipo.",
+                "Models that need more memory than this Mac has."
+            ),
+            Kind::Broken => t!(
+                "Modelos a los que les faltan archivos, de modo que su programa no puede cargarlos.",
+                "Models with missing files, so their app can't load them."
+            ),
+            Kind::Caches => t!(
+                "Datos intermedios y conjuntos de datos que las herramientas de IA guardan en disco.",
+                "Intermediate data and datasets that AI tools keep on disk."
+            ),
+            Kind::Protected => t!(
+                "Carpetas de modelos que solo se pueden revisar con Acceso total al disco.",
+                "Model folders that can only be checked with Full Disk Access."
+            ),
+        }
+    }
+}
+
 struct AiScanner {
     id: &'static str,
-    name: &'static str,
-    description: &'static str,
     kind: Kind,
     shared: Arc<Shared>,
 }
@@ -94,11 +152,11 @@ impl Scanner for AiScanner {
     }
 
     fn name(&self) -> &'static str {
-        self.name
+        self.kind.name()
     }
 
     fn description(&self) -> &'static str {
-        self.description
+        self.kind.description()
     }
 
     fn area(&self) -> Area {
@@ -126,62 +184,20 @@ pub fn scanners() -> Vec<Box<dyn Scanner>> {
 }
 
 fn scanners_sharing(shared: Arc<Shared>) -> Vec<Box<dyn Scanner>> {
-    const LIST: [(&str, &str, &str, Kind); 8] = [
-        (
-            duplicates::SCANNER_ID,
-            "Modelos duplicados",
-            "Los mismos pesos guardados por varios programas. Se convierten en clones APFS sin romper ninguno.",
-            Kind::Duplicates,
-        ),
-        (
-            "ai.abandoned_downloads",
-            "Descargas abandonadas",
-            "Descargas de modelos a medias que llevan al menos una semana sin avanzar.",
-            Kind::Abandoned,
-        ),
-        (
-            "ai.orphans",
-            "Datos huérfanos de modelos",
-            "Capas y revisiones antiguas que ningún modelo instalado usa ya.",
-            Kind::Orphans,
-        ),
-        (
-            "ai.stale_models",
-            "Modelos sin usar",
-            "Modelos que su propio programa registra como sin cargar desde hace más de 90 días.",
-            Kind::Stale,
-        ),
-        (
-            "ai.too_large",
-            "Modelos que no caben en este Mac",
-            "Modelos que necesitan más memoria de la que tiene este equipo.",
-            Kind::TooLarge,
-        ),
-        (
-            "ai.broken_models",
-            "Modelos incompletos",
-            "Modelos a los que les faltan archivos, de modo que su programa no puede cargarlos.",
-            Kind::Broken,
-        ),
-        (
-            "ai.caches",
-            "Cachés de IA",
-            "Datos intermedios y conjuntos de datos que las herramientas de IA guardan en disco.",
-            Kind::Caches,
-        ),
-        (
-            "ai.protected_storage",
-            "Modelos en carpetas protegidas",
-            "Carpetas de modelos que solo se pueden revisar con Acceso total al disco.",
-            Kind::Protected,
-        ),
+    const LIST: [(&str, Kind); 8] = [
+        (duplicates::SCANNER_ID, Kind::Duplicates),
+        ("ai.abandoned_downloads", Kind::Abandoned),
+        ("ai.orphans", Kind::Orphans),
+        ("ai.stale_models", Kind::Stale),
+        ("ai.too_large", Kind::TooLarge),
+        ("ai.broken_models", Kind::Broken),
+        ("ai.caches", Kind::Caches),
+        ("ai.protected_storage", Kind::Protected),
     ];
     LIST.into_iter()
-        .map(|(id, name, description, kind)| {
+        .map(|(id, kind)| {
             Box::new(AiScanner {
                 id,
-                name,
-                description,
                 kind,
                 shared: shared.clone(),
             }) as Box<dyn Scanner>
@@ -213,8 +229,9 @@ fn guard_paths(finding: Finding, targets: &[PathBuf], ctx: &ScanContext) -> Find
     if !refused {
         return finding;
     }
-    let explanation = format!(
+    let explanation = tf!(
         "{} Está en una ubicación que HealthyMac no toca, así que tendrás que eliminarlo a mano.",
+        "{} It's in a location HealthyMac doesn't touch, so you'll have to delete it yourself.",
         finding.explanation
     );
     finding
@@ -229,7 +246,7 @@ fn trash_finding(id: &str, key: &str, title: String, paths: Vec<PathBuf>) -> Fin
 
 fn age_text(time: Option<SystemTime>, now: SystemTime) -> String {
     time.map(|time| human_age(time, now))
-        .unwrap_or_else(|| "hace tiempo".to_string())
+        .unwrap_or_else(|| t!("hace tiempo", "a while ago").to_string())
 }
 
 fn abandoned(id: &str, ctx: &ScanContext, snapshot: &Snapshot) -> Vec<Finding> {
@@ -241,14 +258,20 @@ fn abandoned(id: &str, ctx: &ScanContext, snapshot: &Snapshot) -> Vec<Finding> {
             let finding = trash_finding(
                 id,
                 &leftover.key,
-                format!("Descarga sin terminar: {}", leftover.label),
+                tf!(
+                    "Descarga sin terminar: {}",
+                    "Unfinished download: {}",
+                    leftover.label
+                ),
                 leftover.paths.clone(),
             )
             .group(leftover.runtime.label())
             .subtitle(subtitle(&leftover.paths))
-            .explanation(format!(
+            .explanation(tf!(
                 "Descarga de {} que no avanza desde {}. No sirve para nada hasta que se termine, y si la \
                  quitas, volver a descargar ese modelo empezará de cero.",
+                "This {} download last made progress {}. It's no use until it finishes, and if you \
+                 remove it, downloading that model again starts from scratch.",
                 leftover.runtime.label(),
                 age_text(leftover.newest, ctx.now),
             ))
@@ -267,15 +290,21 @@ fn abandoned(id: &str, ctx: &ScanContext, snapshot: &Snapshot) -> Vec<Finding> {
         let finding = trash_finding(
             id,
             "hf-locks",
-            "Bloqueos antiguos de Hugging Face".to_string(),
+            t!(
+                "Bloqueos antiguos de Hugging Face",
+                "Old Hugging Face lock files"
+            )
+            .to_string(),
             snapshot.stale_locks.clone(),
         )
         .group(RuntimeKind::HuggingFace.label())
         .subtitle(subtitle(&snapshot.stale_locks))
-        .explanation(
+        .explanation(t!(
             "Archivos de bloqueo de descargas que terminaron hace tiempo. Están vacíos, nadie los está \
              usando y Hugging Face los crea de nuevo cuando le hacen falta.",
-        )
+            "Lock files from downloads that finished long ago. They're empty, nothing is using them, \
+             and Hugging Face creates them again when it needs them."
+        ))
         .size(measured.bytes)
         .items(measured.files)
         .risk(Risk::Safe)
@@ -291,7 +320,12 @@ fn subtitle(paths: &[PathBuf]) -> String {
         [only] => only.display().to_string(),
         [first, rest @ ..] => {
             let parent = first.parent().unwrap_or(first);
-            format!("{} y {} más", parent.display(), rest.len())
+            tf!(
+                "{} y {} más",
+                "{} and {} more",
+                parent.display(),
+                rest.len()
+            )
         }
         [] => String::new(),
     }
@@ -300,29 +334,58 @@ fn subtitle(paths: &[PathBuf]) -> String {
 fn orphan_text(leftover: &Leftover) -> (String, String) {
     match leftover.kind {
         LeftoverKind::OllamaOrphan => (
-            "Capas huérfanas de Ollama".to_string(),
-            "Ningún modelo instalado las usa: no aparecen en ningún manifiesto. Ollama suele borrarlas al \
-             arrancar, salvo con OLLAMA_NOPRUNE o si llevaba tiempo sin abrirse."
-                .to_string(),
+            t!("Capas huérfanas de Ollama", "Orphaned Ollama layers").to_string(),
+            t!(
+                "Ningún modelo instalado las usa: no aparecen en ningún manifiesto. Ollama suele borrarlas al \
+                 arrancar, salvo con OLLAMA_NOPRUNE o si llevaba tiempo sin abrirse.",
+                "No installed model uses them: they aren't in any manifest. Ollama usually deletes them when \
+                 it starts, unless OLLAMA_NOPRUNE is set or it hadn't been opened in a while."
+            )
+            .to_string(),
         ),
         LeftoverKind::HfUnreferenced => (
-            format!("Datos sin usar de {}", leftover.label),
-            "Archivos descargados de este repositorio a los que no apunta ninguna revisión. Nada los \
-             encontrará ya: si algo los necesitara, se volverían a descargar."
-                .to_string(),
+            tf!(
+                "Datos sin usar de {}",
+                "Unused data from {}",
+                leftover.label
+            ),
+            t!(
+                "Archivos descargados de este repositorio a los que no apunta ninguna revisión. Nada los \
+                 encontrará ya: si algo los necesitara, se volverían a descargar.",
+                "Files downloaded from this repository that no revision points to. Nothing will find them \
+                 anymore: if something needed them, they would be downloaded again."
+            )
+            .to_string(),
         ),
         LeftoverKind::HfOldRevision => (
-            format!("Revisiones antiguas de {}", leftover.label),
-            "Versiones anteriores de este modelo, sustituidas por una más nueva. El modelo actual sigue \
-             intacto. Solo harían falta a un programa fijado a esa versión exacta, y se volverían a \
-             descargar."
-                .to_string(),
+            tf!(
+                "Revisiones antiguas de {}",
+                "Old revisions of {}",
+                leftover.label
+            ),
+            t!(
+                "Versiones anteriores de este modelo, sustituidas por una más nueva. El modelo actual sigue \
+                 intacto. Solo harían falta a un programa fijado a esa versión exacta, y se volverían a \
+                 descargar.",
+                "Earlier versions of this model, replaced by a newer one. The current model stays intact. \
+                 Only an app pinned to that exact version would need them, and they would be downloaded \
+                 again."
+            )
+            .to_string(),
         ),
         LeftoverKind::HfStoreOrphan => (
-            "Datos compartidos sin usar de Hugging Face".to_string(),
-            "Archivos del almacén compartido de la caché a los que no enlaza ningún modelo ni conjunto de \
-             datos. Quedan así cuando se borra un repositorio a mano."
-                .to_string(),
+            t!(
+                "Datos compartidos sin usar de Hugging Face",
+                "Unused shared Hugging Face data"
+            )
+            .to_string(),
+            t!(
+                "Archivos del almacén compartido de la caché a los que no enlaza ningún modelo ni conjunto de \
+                 datos. Quedan así cuando se borra un repositorio a mano.",
+                "Files in the cache's shared store that no model or dataset links to. They're left behind \
+                 when a repository is deleted by hand."
+            )
+            .to_string(),
         ),
         LeftoverKind::Partial => (leftover.label.clone(), String::new()),
     }
@@ -411,8 +474,9 @@ fn stale(id: &str, ctx: &ScanContext, snapshot: &Snapshot) -> Vec<Finding> {
         .iter()
         .filter(|entry| is_stale(entry, ctx.now))
         .map(|(model, _)| {
-            let explanation = format!(
+            let explanation = tf!(
                 "{} registra su último uso {}.",
+                "{} last recorded using it {}.",
                 usage_source(model),
                 age_text(model.last_used, ctx.now)
             );
@@ -436,8 +500,9 @@ fn too_large(id: &str, ctx: &ScanContext, snapshot: &Snapshot) -> Vec<Finding> {
         .filter(|(model, _)| model.fit == ModelFit::TooLarge && !model.incomplete && !model.loaded)
         .map(|(model, files)| {
             let logical: u64 = files.iter().map(|file| file.len).sum();
-            let explanation = format!(
+            let explanation = tf!(
                 "Necesita unos {} de memoria y este Mac tiene {}, así que no se puede cargar aquí.",
+                "It needs about {} of memory and this Mac has {}, so it can't be loaded here.",
                 human_size(fit::estimated_memory(logical)),
                 human_size(snapshot.budget.total_ram),
             );
@@ -455,9 +520,11 @@ fn broken(id: &str, ctx: &ScanContext, snapshot: &Snapshot) -> Vec<Finding> {
             model.incomplete && !model.loaded && older_than(newest_weight_time(files), ctx.now, ABANDONED_MIN_DAYS)
         })
         .map(|(model, _)| {
-            let explanation = format!(
+            let explanation = tf!(
                 "A esta copia le faltan archivos, de modo que {} no puede cargarla. Puede ser una descarga o \
                  una conversión interrumpida.",
+                "This copy is missing files, so {} can't load it. It may be an interrupted download or \
+                 conversion.",
                 model.runtime.label()
             );
             model_finding(id, ctx, model, explanation, Risk::Review)
@@ -511,14 +578,18 @@ fn omlx_cache(id: &str, ctx: &ScanContext, snapshot: &Snapshot) -> Option<Findin
     }
     let info = fsutil::measure_many(&paths, &ctx.cancel);
     (info.bytes >= MIN_CACHE_BYTES).then(|| {
-        let finding = trash_finding(id, "omlx-ssd", "Caché en disco de oMLX".to_string(), paths)
+        let title = t!("Caché en disco de oMLX", "oMLX disk cache").to_string();
+        let finding = trash_finding(id, "omlx-ssd", title, paths)
             .group(RuntimeKind::OMlx.label())
             .subtitle(cache.display().to_string())
-            .explanation(
+            .explanation(t!(
                 "Contextos ya procesados que oMLX guarda para responder antes a conversaciones repetidas. \
                  Se regeneran solos: lo único que notarás es que los primeros mensajes tardan más. No \
                  se toca mientras oMLX esté abierto.",
-            )
+                "Already processed contexts that oMLX keeps to answer repeated conversations faster. \
+                 They're rebuilt automatically: all you'll notice is that the first messages take longer. \
+                 Left alone while oMLX is open."
+            ))
             .size(info.exclusive())
             .shared_bytes(info.shared)
             .items(info.files)
@@ -543,9 +614,16 @@ fn caches(id: &str, ctx: &ScanContext, snapshot: &Snapshot) -> Vec<Finding> {
                 "hf-datasets",
                 ctx,
                 &roots.datasets_cache,
-                "Caché de conjuntos de datos de Hugging Face",
-                "Conjuntos de datos ya preparados para usar. Muchos se pueden volver a generar, pero algunos \
-                 tardan horas o dejaron de estar disponibles, así que conviene revisarlo.",
+                t!(
+                    "Caché de conjuntos de datos de Hugging Face",
+                    "Hugging Face datasets cache"
+                ),
+                t!(
+                    "Conjuntos de datos ya preparados para usar. Muchos se pueden volver a generar, pero algunos \
+                     tardan horas o dejaron de estar disponibles, así que conviene revisarlo.",
+                    "Datasets already prepared for use. Many can be generated again, but some take hours or \
+                     are no longer available, so it's worth a look first."
+                ),
             )
             .map(|finding| {
                 guard(
@@ -570,13 +648,26 @@ fn caches(id: &str, ctx: &ScanContext, snapshot: &Snapshot) -> Vec<Finding> {
         }
         if bytes >= MIN_CACHE_BYTES {
             let count = snapshot.dataset_repos.len();
-            let finding = trash_finding(id, "hf-dataset-repos", "Conjuntos de datos descargados".to_string(), paths)
+            let title = t!("Conjuntos de datos descargados", "Downloaded datasets").to_string();
+            let explanation = if count == 1 {
+                tf!(
+                    "{count} conjuntos de datos en la caché de modelos de Hugging Face. Se pueden volver a \
+                     descargar, salvo si el original ya no está publicado.",
+                    "1 dataset in the Hugging Face model cache. It can be downloaded again, unless the \
+                     original is no longer published."
+                )
+            } else {
+                tf!(
+                    "{count} conjuntos de datos en la caché de modelos de Hugging Face. Se pueden volver a \
+                     descargar, salvo si el original ya no está publicado.",
+                    "{count} datasets in the Hugging Face model cache. They can be downloaded again, unless \
+                     the original is no longer published."
+                )
+            };
+            let finding = trash_finding(id, "hf-dataset-repos", title, paths)
                 .group(RuntimeKind::HuggingFace.label())
                 .subtitle(roots.hub.display().to_string())
-                .explanation(format!(
-                    "{count} conjuntos de datos en la caché de modelos de Hugging Face. Se pueden volver a \
-                     descargar, salvo si el original ya no está publicado."
-                ))
+                .explanation(explanation)
                 .size(bytes)
                 .items(count as u64)
                 .risk(Risk::Review)
@@ -593,8 +684,14 @@ fn caches(id: &str, ctx: &ScanContext, snapshot: &Snapshot) -> Vec<Finding> {
                 "hf-xet",
                 ctx,
                 &roots.xet_cache,
-                "Caché de transferencias de Hugging Face",
-                "Fragmentos que Hugging Face guarda para acelerar las descargas. Se regeneran solos.",
+                t!(
+                    "Caché de transferencias de Hugging Face",
+                    "Hugging Face transfer cache"
+                ),
+                t!(
+                    "Fragmentos que Hugging Face guarda para acelerar las descargas. Se regeneran solos.",
+                    "Chunks Hugging Face keeps to speed up downloads. They're rebuilt automatically."
+                ),
             )
             .map(|finding| {
                 guard(
@@ -617,9 +714,13 @@ fn caches(id: &str, ctx: &ScanContext, snapshot: &Snapshot) -> Vec<Finding> {
                 "torch-hub",
                 ctx,
                 &torch_hub,
-                "Caché de PyTorch Hub",
-                "Pesos y código que PyTorch descarga cuando un programa los pide. Se vuelven a descargar la \
-                 próxima vez.",
+                t!("Caché de PyTorch Hub", "PyTorch Hub cache"),
+                t!(
+                    "Pesos y código que PyTorch descarga cuando un programa los pide. Se vuelven a descargar la \
+                     próxima vez.",
+                    "Weights and code PyTorch downloads when an app asks for them. They're downloaded again \
+                     the next time."
+                ),
             )
             .map(|finding| {
                 guard(
@@ -647,13 +748,21 @@ fn protected(id: &str, snapshot: &Snapshot) -> Vec<Finding> {
         .map(|path| path.display().to_string())
         .collect::<Vec<_>>()
         .join(", ");
-    vec![Finding::new(id, Area::LocalAi, "full-disk-access", "Hay modelos que no se han podido revisar")
-        .explanation(format!(
+    let title = t!(
+        "Hay modelos que no se han podido revisar",
+        "Some models could not be checked"
+    );
+    vec![Finding::new(id, Area::LocalAi, "full-disk-access", title)
+        .explanation(tf!(
             "Estas carpetas pueden tener modelos, pero entrar en ellas haría que macOS pidiera permiso en \
              mitad del análisis: {list}. Concede Acceso total al disco a HealthyMac para incluirlas en el \
-             inventario y buscar duplicados también ahí."
+             inventario y buscar duplicados también ahí.",
+            "These folders may hold models, but opening them would make macOS ask for permission in the \
+             middle of the scan: {list}. Give HealthyMac Full Disk Access to include them in the inventory \
+             and look for duplicates there too."
         ))
-        .items(skipped.len() as u64)]
+        .items(skipped.len() as u64)
+        .tag(hm_core::TAG_NEEDS_FULL_DISK_ACCESS)]
 }
 
 #[cfg(test)]

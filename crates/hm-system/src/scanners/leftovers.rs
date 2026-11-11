@@ -20,7 +20,9 @@ use std::time::SystemTime;
 
 use anyhow::Result;
 use hm_core::fmt::{age_days, human_age};
-use hm_core::{fsutil, Action, Area, Finding, Recovery, Risk, ScanContext, Scanner, SizeInfo};
+use hm_core::{
+    fsutil, t, tf, Action, Area, Finding, Recovery, Risk, ScanContext, Scanner, SizeInfo,
+};
 use rayon::prelude::*;
 
 use super::policy;
@@ -29,11 +31,35 @@ use crate::inventory::{AppLocator, InstalledApps, Spotlight};
 
 const SCANNER_ID: &str = "apps.leftovers";
 const MIN_AGE_DAYS: u64 = 30;
-const PREFERENCES_KIND: &str = "Preferencias";
+
+/// What a leftover is, as told to the user.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Kind {
+    ApplicationSupport,
+    Cache,
+    Preferences,
+    SavedState,
+    HttpStorage,
+    WebKit,
+}
+
+impl Kind {
+    /// As it reads in the middle of a sentence.
+    fn label(self) -> &'static str {
+        match self {
+            Kind::ApplicationSupport => t!("soporte de aplicación", "application support"),
+            Kind::Cache => t!("caché", "cache"),
+            Kind::Preferences => t!("preferencias", "preferences"),
+            Kind::SavedState => t!("estado guardado", "saved state"),
+            Kind::HttpStorage => t!("almacenamiento http", "HTTP storage"),
+            Kind::WebKit => t!("datos de webkit", "WebKit data"),
+        }
+    }
+}
 
 struct Location {
     relative: &'static str,
-    kind: &'static str,
+    kind: Kind,
     /// Removed from the name to get the bundle id. Empty means the name is the id.
     suffix: &'static str,
     /// Files rather than folders: preference plists and cookie stores.
@@ -43,43 +69,43 @@ struct Location {
 const LOCATIONS: &[Location] = &[
     Location {
         relative: "Library/Application Support",
-        kind: "Soporte de aplicación",
+        kind: Kind::ApplicationSupport,
         suffix: "",
         files: false,
     },
     Location {
         relative: "Library/Caches",
-        kind: "Caché",
+        kind: Kind::Cache,
         suffix: "",
         files: false,
     },
     Location {
         relative: "Library/Preferences",
-        kind: PREFERENCES_KIND,
+        kind: Kind::Preferences,
         suffix: ".plist",
         files: true,
     },
     Location {
         relative: "Library/Saved Application State",
-        kind: "Estado guardado",
+        kind: Kind::SavedState,
         suffix: ".savedState",
         files: false,
     },
     Location {
         relative: "Library/HTTPStorages",
-        kind: "Almacenamiento HTTP",
+        kind: Kind::HttpStorage,
         suffix: "",
         files: false,
     },
     Location {
         relative: "Library/HTTPStorages",
-        kind: "Almacenamiento HTTP",
+        kind: Kind::HttpStorage,
         suffix: ".binarycookies",
         files: true,
     },
     Location {
         relative: "Library/WebKit",
-        kind: "Datos de WebKit",
+        kind: Kind::WebKit,
         suffix: "",
         files: false,
     },
@@ -92,10 +118,13 @@ impl Scanner for AppLeftovers {
         SCANNER_ID
     }
     fn name(&self) -> &'static str {
-        "Restos de apps"
+        t!("Restos de apps", "App leftovers")
     }
     fn description(&self) -> &'static str {
-        "Datos que dejaron apps que ya no están instaladas."
+        t!(
+            "Datos que dejaron apps que ya no están instaladas.",
+            "Data left behind by apps that are no longer installed."
+        )
     }
     fn area(&self) -> Area {
         Area::Apps
@@ -109,7 +138,7 @@ impl Scanner for AppLeftovers {
 
 #[derive(Debug, Default)]
 struct Candidate {
-    paths: Vec<(PathBuf, &'static str)>,
+    paths: Vec<(PathBuf, Kind)>,
 }
 
 pub(crate) fn scan_leftovers(
@@ -122,18 +151,23 @@ pub(crate) fn scan_leftovers(
         return Vec::new();
     }
     if !apps.complete {
-        return vec![cannot_confirm(
+        return vec![cannot_confirm(t!(
             "No se pudo leer la lista completa de apps instaladas, y con una lista incompleta una \
              app que sigue instalada parecería desinstalada. Por seguridad no se marca ningún \
              resto.",
-        )];
+            "The full list of installed apps could not be read, and with an incomplete list an \
+             app that is still installed would look uninstalled. To be safe, nothing is marked \
+             as a leftover."
+        ))];
     }
     if !locator.is_healthy() {
-        return vec![cannot_confirm(
+        return vec![cannot_confirm(t!(
             "Spotlight no está respondiendo, y hace falta para comprobar que una app no esté \
              instalada en otra ubicación. Por seguridad no se marca ningún resto hasta que vuelva \
              a funcionar.",
-        )];
+            "Spotlight is not responding, and it is needed to check that an app is not installed \
+             somewhere else. To be safe, nothing is marked as a leftover until it works again."
+        ))];
     }
     let candidates: Vec<(String, Candidate)> = candidates.into_iter().collect();
     let mut findings: Vec<Finding> = candidates
@@ -149,7 +183,10 @@ fn cannot_confirm(explanation: &str) -> Finding {
         SCANNER_ID,
         Area::Apps,
         "sin_confirmar",
-        "No se pudieron comprobar los restos de apps",
+        t!(
+            "No se pudieron comprobar los restos de apps",
+            "App leftovers could not be checked"
+        ),
     )
     .explanation(explanation)
 }
@@ -229,12 +266,12 @@ fn candidate_finding(
         || candidate
             .paths
             .iter()
-            .all(|(_, kind)| *kind == PREFERENCES_KIND)
+            .all(|(_, kind)| *kind == Kind::Preferences)
     {
         return None;
     }
     let mut total = SizeInfo::default();
-    let mut kinds: Vec<&str> = Vec::new();
+    let mut kinds: Vec<Kind> = Vec::new();
     for (path, kind) in &candidate.paths {
         let info = ctx.measure(path);
         // If part of it cannot be read, we cannot tell when it was last used.
@@ -246,7 +283,7 @@ fn candidate_finding(
         total.files += info.files;
         total.newest_modified = total.newest_modified.max(info.newest_modified);
         if !kinds.contains(kind) {
-            kinds.push(kind);
+            kinds.push(*kind);
         }
     }
     let newest: SystemTime = total.newest_modified?;
@@ -269,19 +306,30 @@ fn candidate_finding(
     let subtitle = if paths.len() == 1 {
         paths[0].display().to_string()
     } else {
-        format!("{} ubicaciones", paths.len())
+        tf!("{} ubicaciones", "{} locations", paths.len())
     };
     Some(
-        Finding::new(SCANNER_ID, Area::Apps, id, format!("Restos de {id}"))
-            .subtitle(subtitle)
-            .measured(&total)
-            .explanation(format!(
-                "Ninguna app instalada usa este identificador y nada lo ha tocado desde {}. Contiene: \
-                 {}. Puede incluir ajustes o datos que querrías conservar si piensas volver a \
-                 instalarla, así que revísalo antes.",
-                human_age(newest, ctx.now),
-                kinds.join(", ").to_lowercase()
-            ))
+        Finding::new(
+            SCANNER_ID,
+            Area::Apps,
+            id,
+            tf!("Restos de {id}", "Leftovers of {id}"),
+        )
+        .subtitle(subtitle)
+        .measured(&total)
+        .explanation(tf!(
+            "Ninguna app instalada usa este identificador y nada lo ha tocado desde {}. Contiene: \
+             {}. Puede incluir ajustes o datos que querrías conservar si piensas volver a \
+             instalarla, así que revísalo antes.",
+            "No installed app uses this identifier, and it was last changed {}. It holds: {}. It may include settings or data you'd want to keep if you plan to install \
+             the app again, so check it first.",
+            human_age(newest, ctx.now),
+            kinds
+                .iter()
+                .map(|kind| kind.label())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ))
             .risk(Risk::Review)
             .recovery(Recovery::None)
             .selected(false)

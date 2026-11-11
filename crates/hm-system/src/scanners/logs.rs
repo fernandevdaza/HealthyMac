@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use hm_core::fmt::human_size;
-use hm_core::{Action, Area, Finding, Recovery, Risk, ScanContext, Scanner, SizeInfo};
+use hm_core::{t, tf, Action, Area, Finding, Recovery, Risk, ScanContext, Scanner, SizeInfo};
 use rayon::prelude::*;
 
 use super::policy;
@@ -39,10 +39,13 @@ impl Scanner for Logs {
         SCANNER_ID
     }
     fn name(&self) -> &'static str {
-        "Registros"
+        t!("Registros", "Logs")
     }
     fn description(&self) -> &'static str {
-        "Registros de apps y del sistema, e informes de fallos antiguos."
+        t!(
+            "Registros de apps y del sistema, e informes de fallos antiguos.",
+            "App and system logs, and old crash reports."
+        )
     }
     fn area(&self) -> Area {
         Area::System
@@ -62,7 +65,10 @@ pub(crate) fn scan_logs(ctx: &ScanContext, system_logs: &Path, limits: Limits) -
         ctx,
         &ctx.home_path("Library/Logs/DiagnosticReports"),
         "fallos",
-        "Informes de fallos de tus apps",
+        t!(
+            "Informes de fallos de tus apps",
+            "Crash reports from your apps"
+        ),
     ));
     findings.extend(system_log_findings(ctx, system_logs, limits.report));
     findings
@@ -118,14 +124,16 @@ fn user_logs(ctx: &ScanContext, own_finding_min: u64) -> Vec<Finding> {
                 SCANNER_ID,
                 Area::System,
                 &name,
-                format!("Registros de {name}"),
+                tf!("Registros de {name}", "{name} logs"),
             )
             .trash(&entry.path)
             .measured(&entry.info)
-            .explanation(
+            .explanation(t!(
                 "Registros de actividad. Solo sirven para diagnosticar problemas y la app \
                      escribe unos nuevos cuando los necesita.",
-            )
+                "Activity logs. They are only useful for diagnosing problems, and the app writes \
+                 new ones when it needs them."
+            ))
             .risk(Risk::Safe)
             .recovery(Recovery::Automatic)
             .selected(true)
@@ -136,17 +144,24 @@ fn user_logs(ctx: &ScanContext, own_finding_min: u64) -> Vec<Finding> {
         let info = sum_info(&small);
         let paths = small.iter().map(|entry| entry.path.clone()).collect();
         findings.push(
-            Finding::new(SCANNER_ID, Area::System, "usuario", "Registros de apps")
-                .subtitle(root.display().to_string())
-                .measured(&info)
-                .explanation(
-                    "Registros de actividad de tus apps. Solo sirven para diagnosticar problemas y \
-                     cada app escribe unos nuevos cuando los necesita.",
-                )
-                .risk(Risk::Safe)
-                .recovery(Recovery::Automatic)
-                .selected(true)
-                .action(Action::Trash { paths }),
+            Finding::new(
+                SCANNER_ID,
+                Area::System,
+                "usuario",
+                t!("Registros de apps", "App logs"),
+            )
+            .subtitle(root.display().to_string())
+            .measured(&info)
+            .explanation(t!(
+                "Registros de actividad de tus apps. Solo sirven para diagnosticar problemas y \
+                 cada app escribe unos nuevos cuando los necesita.",
+                "Activity logs from your apps. They are only useful for diagnosing problems, and \
+                 each app writes new ones when it needs them."
+            ))
+            .risk(Risk::Safe)
+            .recovery(Recovery::Automatic)
+            .selected(true)
+            .action(Action::Trash { paths }),
         );
     }
     findings
@@ -178,11 +193,14 @@ fn crash_reports(ctx: &ScanContext, dir: &Path, key: &str, title: &str) -> Optio
         Finding::new(SCANNER_ID, Area::System, key, title)
             .subtitle(dir.display().to_string())
             .measured(&info)
-            .explanation(
+            .explanation(t!(
                 "Informes que macOS guarda cuando una app se cierra de golpe. No hacen falta para \
                  nada salvo para investigar ese fallo, y una vez borrados no vuelven, así que no \
                  van preseleccionados.",
-            )
+                "Reports macOS saves when an app quits unexpectedly. They are only useful for \
+                 looking into that crash, and once deleted they do not come back, so they are not \
+                 preselected."
+            ))
             .risk(Risk::Moderate)
             .recovery(Recovery::None)
             .action(Action::TrashContents {
@@ -203,7 +221,7 @@ fn system_log_findings(ctx: &ScanContext, root: &Path, report_min: u64) -> Vec<F
             ctx,
             &reports,
             "fallos_sistema",
-            "Informes de fallos del sistema",
+            t!("Informes de fallos del sistema", "System crash reports"),
         ));
     } else {
         skip.clear();
@@ -220,17 +238,24 @@ fn system_log_findings(ctx: &ScanContext, root: &Path, report_min: u64) -> Vec<F
         let info = sum_info(&removable);
         let paths = removable.iter().map(|entry| entry.path.clone()).collect();
         findings.push(
-            Finding::new(SCANNER_ID, Area::System, "sistema", "Registros del sistema")
-                .subtitle(root.display().to_string())
-                .measured(&info)
-                .explanation(
-                    "Registros de servicios instalados para todos los usuarios. Solo sirven para \
-                     diagnosticar problemas y se escriben de nuevo cuando hacen falta.",
-                )
-                .risk(Risk::Safe)
-                .recovery(Recovery::Automatic)
-                .selected(true)
-                .action(Action::Trash { paths }),
+            Finding::new(
+                SCANNER_ID,
+                Area::System,
+                "sistema",
+                t!("Registros del sistema", "System logs"),
+            )
+            .subtitle(root.display().to_string())
+            .measured(&info)
+            .explanation(t!(
+                "Registros de servicios instalados para todos los usuarios. Solo sirven para \
+                 diagnosticar problemas y se escriben de nuevo cuando hacen falta.",
+                "Logs from services installed for all users. They are only useful for diagnosing \
+                 problems and are written again when needed."
+            ))
+            .risk(Risk::Safe)
+            .recovery(Recovery::Automatic)
+            .selected(true)
+            .action(Action::Trash { paths }),
         );
     }
 
@@ -241,13 +266,19 @@ fn system_log_findings(ctx: &ScanContext, root: &Path, report_min: u64) -> Vec<F
                 SCANNER_ID,
                 Area::System,
                 "sistema_sin_permiso",
-                format!("Registros del sistema: {}", human_size(locked_bytes)),
+                tf!(
+                    "Registros del sistema: {}",
+                    "System logs: {}",
+                    human_size(locked_bytes)
+                ),
             )
             .subtitle(root.display().to_string())
-            .explanation(
+            .explanation(t!(
                 "Pertenecen al administrador del sistema y HealthyMac nunca pide privilegios, así \
                  que solo se muestran. macOS rota la mayoría por su cuenta.",
-            ),
+                "They belong to the system administrator and HealthyMac never asks for \
+                 privileges, so they are only shown. macOS rotates most of them on its own."
+            )),
         );
     }
     findings

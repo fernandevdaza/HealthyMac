@@ -1,13 +1,14 @@
 //! Who is listening on what. Handy when something already holds port 3000.
 
 use gpui::{div, prelude::*, px, uniform_list, AnyElement, Context, ElementId, FontWeight, Window};
+use hm_core::{t, tf};
 
 use super::{gutter_row, plural};
 use crate::assets::Icon;
 use crate::state::Shell;
 use crate::theme::{self, font, radius, sp, GUTTER};
 use crate::ui::chrome::{empty_state, notice, page_header, NoticeKind};
-use crate::ui::controls::{tag, Btn, BtnSize};
+use crate::ui::controls::{tag, Btn, ROW_GROUP};
 use crate::ui::label::path_label;
 use crate::ui::scrollbar::{scrollbar, ScrollSource};
 use crate::ui::{clip, col, row, TextExt};
@@ -18,15 +19,30 @@ const PROCESS_WIDTH: f32 = 270.0;
 impl Shell {
     pub fn render_ports(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let count = self.ports.ports.data.as_ref().map_or(0, Vec::len);
+        // Usually every listener is the current user's, and a column of the same name says nothing.
+        let show_user = self.ports.ports.data.as_ref().is_some_and(|ports| {
+            ports
+                .iter()
+                .any(|port| ports.first().is_some_and(|first| first.user != port.user))
+        });
         let subtitle = if self.ports.ports.data.is_some() {
-            format!(
+            tf!(
                 "{} de tus procesos. Se actualiza cada pocos segundos.",
-                plural(count, "puerto escuchando", "puertos escuchando")
+                "{} from your processes. Refreshes every few seconds.",
+                plural(
+                    count,
+                    t!("puerto escuchando", "listening port"),
+                    t!("puertos escuchando", "listening ports")
+                )
             )
         } else {
-            "Qué procesos tuyos están escuchando en la red.".to_string()
+            t!(
+                "Qué procesos tuyos están escuchando en la red.",
+                "Which of your processes are listening on the network."
+            )
+            .to_string()
         };
-        let header = page_header("Puertos", subtitle, Vec::new());
+        let header = page_header(t!("Puertos", "Ports"), subtitle, Vec::new());
 
         let body: AnyElement = if let (None, Some(error)) =
             (&self.ports.ports.data, &self.ports.ports.error)
@@ -35,7 +51,10 @@ impl Shell {
                 .px(px(GUTTER))
                 .child(notice(
                     NoticeKind::Error,
-                    "No hemos podido leer los puertos",
+                    t!(
+                        "No hemos podido leer los puertos",
+                        "We couldn't read the ports"
+                    ),
                     Some(error.clone().into()),
                     None,
                 ))
@@ -43,18 +62,21 @@ impl Shell {
         } else if self.ports.ports.data.is_none() {
             empty_state(
                 Icon::Plug,
-                theme::area_color(hm_core::Area::Developer),
-                "Mirando los puertos",
-                "Un segundo.",
+                theme::text_2(),
+                t!("Mirando los puertos", "Checking ports"),
+                t!("Un segundo.", "One second."),
                 None,
             )
             .into_any_element()
         } else if count == 0 {
             empty_state(
                 Icon::Plug,
-                theme::area_color(hm_core::Area::Developer),
-                "Nadie está escuchando",
-                "Ninguno de tus procesos tiene un puerto abierto ahora mismo. Cuando arranques un servidor, lo verás aquí.",
+                theme::text_2(),
+                t!("Nadie está escuchando", "Nothing is listening"),
+                t!(
+                    "Ninguno de tus procesos tiene un puerto abierto ahora mismo. Cuando arranques un servidor, lo verás aquí.",
+                    "None of your processes has a port open right now. When you start a server, you'll see it here."
+                ),
                 None,
             )
             .into_any_element()
@@ -67,7 +89,10 @@ impl Shell {
                 .when_some(self.ports.ports.error.clone(), |this, error| {
                     this.child(div().px(px(GUTTER)).pb(sp(2.)).child(notice(
                         NoticeKind::Warning,
-                        "No se ha podido actualizar: esto es de hace un momento",
+                        t!(
+                            "No se ha podido actualizar: esto es de hace un momento",
+                            "Couldn't refresh: this is from a moment ago"
+                        ),
                         Some(error.into()),
                         None,
                     )))
@@ -82,10 +107,12 @@ impl Shell {
                         .border_color(theme::hairline())
                         .fs(font::MICRO)
                         .text_color(theme::text_3())
-                        .child(div().w(px(72.)).child("Puerto"))
-                        .child(div().w(px(PROCESS_WIDTH)).child("Proceso"))
-                        .child(div().flex_1().min_w(px(0.)).child("Carpeta"))
-                        .child(div().w(px(80.)).child("Usuario"))
+                        .child(div().w(px(72.)).child(t!("Puerto", "Port")))
+                        .child(div().w(px(PROCESS_WIDTH)).child(t!("Proceso", "Process")))
+                        .child(div().flex_1().min_w(px(0.)).child(t!("Carpeta", "Folder")))
+                        .when(show_user, |this| {
+                            this.child(div().w(px(80.)).child(t!("Usuario", "User")))
+                        })
                         .child(div().w(px(82.))),
                 )
                 .child(
@@ -98,12 +125,12 @@ impl Shell {
                                 "ports-list",
                                 count,
                                 cx.processor(
-                                    |this: &mut Shell,
-                                     range: std::ops::Range<usize>,
-                                     _window,
-                                     cx| {
+                                    move |this: &mut Shell,
+                                          range: std::ops::Range<usize>,
+                                          _window,
+                                          cx| {
                                         range
-                                            .map(|index| this.render_port(index, cx))
+                                            .map(|index| this.render_port(index, show_user, cx))
                                             .collect::<Vec<_>>()
                                     },
                                 ),
@@ -122,7 +149,7 @@ impl Shell {
             .into_any_element()
     }
 
-    fn render_port(&mut self, index: usize, cx: &mut Context<Self>) -> AnyElement {
+    fn render_port(&mut self, index: usize, show_user: bool, cx: &mut Context<Self>) -> AnyElement {
         let Some(port) = self
             .ports
             .ports
@@ -138,6 +165,7 @@ impl Shell {
             .child(
                 row()
                     .id(ElementId::NamedInteger("port".into(), index as u64))
+                    .group(ROW_GROUP)
                     .h(px(ROW_HEIGHT))
                     .w_full()
                     .px(sp(2.))
@@ -168,7 +196,7 @@ impl Shell {
                                 clip()
                                     .w_full()
                                     .fs(font::BODY)
-                                    .child(port.process_name.clone()),
+                                    .child(crate::logic::ports::display_name(&port)),
                             )
                             .child(
                                 row()
@@ -178,9 +206,7 @@ impl Shell {
                                         this.child(
                                             clip()
                                                 .fs(font::MICRO)
-                                                .text_color(theme::area_color(
-                                                    hm_core::Area::Developer,
-                                                ))
+                                                .text_color(theme::text_2())
                                                 .child(hint),
                                         )
                                     })
@@ -212,21 +238,30 @@ impl Shell {
                             },
                         ),
                     )
-                    .child(
-                        clip()
-                            .flex_none()
-                            .w(px(80.))
-                            .fs(font::CAPTION)
-                            .text_color(theme::text_2())
-                            .child(port.user.clone()),
-                    )
+                    .when(show_user, |this| {
+                        this.child(
+                            clip()
+                                .flex_none()
+                                .w(px(80.))
+                                .fs(font::CAPTION)
+                                .text_color(theme::text_2())
+                                .child(port.user.clone()),
+                        )
+                    })
                     .child(div().flex_none().w(px(82.)).flex().justify_end().child(
-                        Btn::ghost("Terminar").size(BtnSize::Sm).build(
-                            ElementId::NamedInteger("port-kill".into(), index as u64),
-                            cx.listener(move |this, _, _, cx| {
-                                this.open_terminate(target.clone(), cx)
-                            }),
-                        ),
+                        // macOS's own services get a label instead: quitting them helps nobody.
+                        if crate::logic::ports::is_system_process(&port) {
+                            tag("macOS").into_any_element()
+                        } else {
+                            Btn::row_danger(t!("Terminar", "Quit"))
+                                .build(
+                                    ElementId::NamedInteger("port-kill".into(), index as u64),
+                                    cx.listener(move |this, _, _, cx| {
+                                        this.open_terminate(target.clone(), cx)
+                                    }),
+                                )
+                                .into_any_element()
+                        },
                     )),
             )
             .into_any_element()

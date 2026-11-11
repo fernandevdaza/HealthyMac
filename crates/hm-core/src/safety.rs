@@ -12,23 +12,71 @@ use thiserror::Error;
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum SafetyViolation {
-    #[error("la ruta no es absoluta o contiene '..': {0}")]
+    #[error(
+        "{}: {}",
+        crate::t!(
+            "la ruta no es absoluta o contiene '..'",
+            "the path is not absolute or contains '..'"
+        ),
+        .0.display()
+    )]
     NotNormalized(PathBuf),
-    #[error("la ruta ya no existe: {0}")]
+    #[error(
+        "{}: {}",
+        crate::t!("la ruta ya no existe", "the path no longer exists"),
+        .0.display()
+    )]
     Missing(PathBuf),
-    #[error("fuera de las zonas permitidas: {0}")]
+    #[error(
+        "{}: {}",
+        crate::t!("fuera de las zonas permitidas", "outside the allowed areas"),
+        .0.display()
+    )]
     OutsideAllowedZones(PathBuf),
-    #[error("es una carpeta protegida o contiene una: {0}")]
+    #[error(
+        "{}: {}",
+        crate::t!(
+            "es una carpeta protegida o contiene una",
+            "is a protected folder or contains one"
+        ),
+        .0.display()
+    )]
     ProtectedFolder(PathBuf),
-    #[error("está dentro de una zona con datos sensibles: {0}")]
+    #[error(
+        "{}: {}",
+        crate::t!(
+            "está dentro de una zona con datos sensibles",
+            "is inside an area with sensitive data"
+        ),
+        .0.display()
+    )]
     SensitiveTree(PathBuf),
-    #[error("es un punto de montaje: {0}")]
+    #[error(
+        "{}: {}",
+        crate::t!("es un punto de montaje", "is a mount point"),
+        .0.display()
+    )]
     MountPoint(PathBuf),
-    #[error("excluida por el usuario: {0}")]
+    #[error(
+        "{}: {}",
+        crate::t!("excluida por el usuario", "excluded by you"),
+        .0.display()
+    )]
     UserExcluded(PathBuf),
-    #[error("contiene el programa que se está ejecutando: {0}")]
+    #[error(
+        "{}: {}",
+        crate::t!(
+            "contiene el programa que se está ejecutando",
+            "contains the program that is running"
+        ),
+        .0.display()
+    )]
     RunningProgram(PathBuf),
-    #[error("programa no permitido: {0}")]
+    #[error(
+        "{}: {}",
+        crate::t!("programa no permitido", "program not allowed"),
+        .0
+    )]
     ProgramNotAllowed(String),
 }
 

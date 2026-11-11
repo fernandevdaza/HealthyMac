@@ -6,7 +6,7 @@ use std::time::SystemTime;
 
 use anyhow::Result;
 use hm_core::fmt::{age_days, human_age};
-use hm_core::{fsutil, Area, Finding, Recovery, Risk, ScanContext, Scanner};
+use hm_core::{fsutil, t, tf, Area, Finding, Recovery, Risk, ScanContext, Scanner};
 
 use crate::gate::{self, name_of};
 
@@ -27,10 +27,13 @@ impl Scanner for Installers {
         SCANNER_ID
     }
     fn name(&self) -> &'static str {
-        "Instaladores antiguos"
+        t!("Instaladores antiguos", "Old installers")
     }
     fn description(&self) -> &'static str {
-        "Imágenes de disco e instaladores viejos, y actualizaciones de iOS descargadas."
+        t!(
+            "Imágenes de disco e instaladores viejos, y actualizaciones de iOS descargadas.",
+            "Old disk images and installers, and downloaded iOS updates."
+        )
     }
     fn area(&self) -> Area {
         Area::Files
@@ -76,9 +79,14 @@ pub(crate) fn scan_installers(ctx: &ScanContext) -> Vec<Finding> {
         findings.push(gate::missing_access_finding(
             SCANNER_ID,
             Area::Files,
-            "Sin el Acceso total al disco no se revisa la carpeta Descargas, que es donde suelen \
-             quedarse los instaladores. Con el permiso, HealthyMac encontrará los .dmg, .pkg e \
-             imágenes de sistema que ya no uses.",
+            t!(
+                "Sin el Acceso total al disco no se revisa la carpeta Descargas, que es donde suelen \
+                 quedarse los instaladores. Con el permiso, HealthyMac encontrará los .dmg, .pkg e \
+                 imágenes de sistema que ya no uses.",
+                "Without Full Disk Access, the Downloads folder is not checked, and that is where \
+                 installers usually end up. With the permission, HealthyMac will find the .dmg and \
+                 .pkg files and system images you no longer use."
+            ),
         ));
     }
     findings
@@ -129,16 +137,20 @@ fn installer_finding(ctx: &ScanContext, path: &Path) -> Option<Finding> {
     if info.bytes == 0 {
         return None;
     }
-    let mut explanation = format!(
+    let mut explanation = tf!(
         "Instalador descargado {}. Una vez instalada la app ya no hace falta, y se puede volver a \
          descargar.",
+        "Installer downloaded {}. Once the app is installed it is no longer needed, and it can be \
+         downloaded again.",
         human_age(arrived, ctx.now)
     );
     if risk == Risk::Review {
-        explanation.push_str(
+        explanation.push_str(t!(
             " Si es una imagen de disco tuya, con tus propios archivos dentro, consérvala: esa no \
              se puede volver a descargar.",
-        );
+            " If it is a disk image of your own, with your own files inside, keep it: that one \
+             cannot be downloaded again."
+        ));
     }
     Some(
         Finding::new(
@@ -180,14 +192,20 @@ fn ios_updates(ctx: &ScanContext) -> Vec<Finding> {
                     SCANNER_ID,
                     Area::Files,
                     path.display().to_string(),
-                    format!("Actualización de iOS: {}", name_of(&path)),
+                    tf!(
+                        "Actualización de iOS: {}",
+                        "iOS update: {}",
+                        name_of(&path)
+                    ),
                 )
                 .trash(&path)
                 .measured(&info)
-                .explanation(
+                .explanation(t!(
                     "Copia de una actualización de iOS o iPadOS que el Mac descargó para instalarla \
                      en un dispositivo. Si la necesitas otra vez, se descarga de nuevo.",
-                )
+                    "A copy of an iOS or iPadOS update the Mac downloaded to install on a device. \
+                     If you need it again, it downloads again."
+                ))
                 .risk(Risk::Moderate)
                 .recovery(Recovery::Redownload)
                 .selected(false),

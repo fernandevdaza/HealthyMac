@@ -19,7 +19,8 @@ pub struct ListeningPort {
     /// The process's working directory, which usually tells you which project it belongs to.
     pub cwd: Option<PathBuf>,
     pub user: String,
-    /// Friendly guess in Spanish when the port is well known: "Ollama", "PostgreSQL", "Vite"...
+    /// Friendly guess, in the current language, when the port is well known: "Ollama",
+    /// "PostgreSQL", "Vite"...
     pub service_hint: Option<String>,
 }
 
@@ -102,7 +103,7 @@ pub struct DockerSummary {
     pub disk_image_bytes: u64,
     /// `true` if the disk image was found and measured. With `false`, a zero means unknown.
     pub disk_image_readable: bool,
-    /// Why the disk image could not be read, in Spanish, when that deserves saying.
+    /// Why the disk image could not be read, in the current language, when that deserves saying.
     pub disk_image_note: Option<String>,
     /// `true` if `images`, `containers`, `volumes` and `build_cache` hold real figures. With
     /// `false`, the daemon is down or did not answer, and their zeros mean unknown.

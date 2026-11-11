@@ -8,7 +8,7 @@ use hm_ai::types::{
     DuplicateGroup, LocalModel, ModelFit, ModelFormat, ModelInventory, RuntimeStatus, UsageSignal,
 };
 use hm_core::fmt::{human_age, human_memory, human_size};
-use hm_core::{Action, Area, Finding, Recovery, Risk};
+use hm_core::{t, tf, Action, Area, Finding, Recovery, Risk};
 
 use super::{content_width, gutter_row, plural};
 use crate::assets::Icon;
@@ -26,8 +26,8 @@ pub(super) const LOCAL_AI: Area = Area::LocalAi;
 pub fn fit_color(fit: ModelFit) -> Hsla {
     match fit {
         ModelFit::Comfortable => theme::green(),
-        ModelFit::Tight => theme::amber(),
-        ModelFit::CpuOnly => theme::orange(),
+        ModelFit::Tight => theme::yellow(),
+        ModelFit::CpuOnly => theme::amber(),
         ModelFit::TooLarge => theme::rose(),
         ModelFit::Unknown => theme::text_3(),
     }
@@ -59,11 +59,11 @@ impl Shell {
                     div()
                         .fs(font::CAPTION)
                         .text_color(theme::text_2())
-                        .child("Actualizando…"),
+                        .child(t!("Actualizando…", "Refreshing…")),
                 )
                 .into_any_element()
         } else {
-            Btn::secondary("Actualizar")
+            Btn::secondary(t!("Actualizar", "Refresh"))
                 .icon(Icon::Refresh)
                 .build(
                     "models-reload",
@@ -72,14 +72,17 @@ impl Shell {
                 .into_any_element()
         };
         let header = page_header(
-            "Modelos",
-            "Todos tus modelos locales, y cuáles caben de verdad en la memoria de este Mac.",
+            t!("Modelos", "Models"),
+            t!(
+                "Todos tus modelos locales, y cuáles caben de verdad en la memoria de este Mac.",
+                "All your local models, and which ones really fit in this Mac's memory."
+            ),
             vec![reload],
         );
 
         let body: AnyElement = if self.models.inventory.data.is_none() {
             if let Some(error) = self.models.inventory.error.clone() {
-                let retry = Btn::secondary("Reintentar")
+                let retry = Btn::secondary(t!("Reintentar", "Try again"))
                     .size(BtnSize::Sm)
                     .build(
                         "models-retry",
@@ -90,7 +93,10 @@ impl Shell {
                     .px(px(GUTTER))
                     .child(notice(
                         NoticeKind::Error,
-                        "No hemos podido hacer el inventario de modelos",
+                        t!(
+                            "No hemos podido hacer el inventario de modelos",
+                            "Couldn't list your models"
+                        ),
                         Some(error.into()),
                         Some(retry),
                     ))
@@ -98,9 +104,12 @@ impl Shell {
             } else {
                 empty_state(
                     Icon::Cube,
-                    theme::area_color(LOCAL_AI),
-                    "Buscando modelos",
-                    "Miramos en Ollama, LM Studio, Hugging Face, MLX y compañía. La primera vez puede tardar un poco, porque hay que comparar archivos muy grandes.",
+                    theme::text_2(),
+                    t!("Buscando modelos", "Looking for models"),
+                    t!(
+                        "Miramos en Ollama, LM Studio, Hugging Face, MLX y compañía. La primera vez puede tardar un poco, porque hay que comparar archivos muy grandes.",
+                        "Checking Ollama, LM Studio, Hugging Face, MLX and the like. The first time can take a while, because very large files have to be compared."
+                    ),
                     None,
                 )
                 .into_any_element()
@@ -160,12 +169,12 @@ impl Shell {
                 .items_center()
                 .gap(sp(2.))
                 .py(sp(10.))
-                .child(icon(Icon::Cube, 24.0, theme::area_color(LOCAL_AI)))
+                .child(icon(Icon::Cube, 24.0, theme::text_2()))
                 .child(
                     div()
                         .fs(font::SUBHEAD)
                         .font_weight(FontWeight::SEMIBOLD)
-                        .child("Aún no hay modelos en este Mac"),
+                        .child(t!("Aún no hay modelos en este Mac", "No models on this Mac yet")),
                 )
                 .child(
                     div()
@@ -173,7 +182,10 @@ impl Shell {
                         .text_center()
                         .fs(font::BODY)
                         .text_color(theme::text_2())
-                        .child("Cuando descargues alguno con Ollama, LM Studio, Hugging Face o MLX, aparecerá aquí, en el punto de la regla que le corresponde."),
+                        .child(t!(
+                            "Cuando descargues alguno con Ollama, LM Studio, Hugging Face o MLX, aparecerá aquí, en el punto de la regla que le corresponde.",
+                            "When you download one with Ollama, LM Studio, Hugging Face or MLX, it shows up here, at its place on the ruler."
+                        )),
                 )
                 .into_any_element(),
             ModelRow::Model(position) => {
@@ -191,7 +203,11 @@ impl Shell {
     }
 
     fn render_table_header(&self, wide: bool, cx: &mut Context<Self>) -> impl IntoElement {
-        let labels: Vec<SharedString> = vec!["Tamaño".into(), "Último uso".into(), "Nombre".into()];
+        let labels: Vec<SharedString> = vec![
+            t!("Tamaño", "Size").into(),
+            t!("Último uso", "Last used").into(),
+            t!("Nombre", "Name").into(),
+        ];
         let selected = match self.models.sort {
             ModelSort::Size => 0,
             ModelSort::LastUsed => 1,
@@ -212,7 +228,11 @@ impl Shell {
                 row()
                     .px(px(GUTTER))
                     .justify_between()
-                    .child(section_title(plural(count, "modelo", "modelos")))
+                    .child(section_title(plural(
+                        count,
+                        t!("modelo", "model"),
+                        t!("modelos", "models"),
+                    )))
                     .child(segmented(
                         "model-sort",
                         &labels,
@@ -241,14 +261,14 @@ impl Shell {
                     .border_color(theme::hairline())
                     .fs(font::MICRO)
                     .text_color(theme::text_3())
-                    .child(div().flex_1().min_w(px(0.)).child("Modelo"))
+                    .child(div().flex_1().min_w(px(0.)).child(t!("Modelo", "Model")))
                     .child(div().w(px(92.)).child("Runtime"))
-                    .child(div().w(px(116.)).child("Formato"))
-                    .child(div().w(px(100.)).child("En memoria"))
+                    .child(div().w(px(116.)).child(t!("Formato", "Format")))
+                    .child(div().w(px(100.)).child(t!("En memoria", "In memory")))
                     .when(wide, |this| {
-                        this.child(div().w(px(124.)).child("Último uso"))
+                        this.child(div().w(px(124.)).child(t!("Último uso", "Last used")))
                     })
-                    .child(div().w(px(70.)).text_right().child("Tamaño"))
+                    .child(div().w(px(70.)).text_right().child(t!("Tamaño", "Size")))
                     .child(div().w(px(26.))),
             )
     }
@@ -268,10 +288,14 @@ impl Shell {
             facts.push(format_parameters(parameters));
         }
         if let Some(context) = model.context_length {
-            facts.push(format!("contexto {}", format_context(context)));
+            facts.push(tf!("contexto {}", "{} context", format_context(context)));
         }
         if model.shared_bytes > 0 {
-            facts.push(format!("{} compartidos", human_size(model.shared_bytes)));
+            facts.push(tf!(
+                "{} compartidos",
+                "{} shared",
+                human_size(model.shared_bytes)
+            ));
         }
         let format_text = match &model.quantization {
             Some(quantization) => format!("{} · {}", format_label(model.format), quantization),
@@ -303,7 +327,7 @@ impl Shell {
                                     .child(model.name.clone()),
                             )
                             .when(model.incomplete, |this| {
-                                this.child(pill("Incompleto", theme::amber()))
+                                this.child(pill(t!("Incompleto", "Incomplete"), theme::amber()))
                             }),
                     )
                     .when(!facts.is_empty(), |this| {
@@ -373,8 +397,8 @@ impl Shell {
                                 hm_ai::inventory::model_removal_finding(&remove_model)
                             };
                             this.open_review(
-                                format!("Eliminar {}", remove_model.name),
-                                "Eliminar modelo",
+                                tf!("Eliminar {}", "Remove {}", remove_model.name),
+                                t!("Eliminar modelo", "Remove model"),
                                 vec![finding],
                                 cx,
                             );
@@ -394,7 +418,12 @@ impl Shell {
                     .unwrap_or_else(|| dedupe_finding(group))
             })
             .collect();
-        self.open_review("Deduplicar modelos", "Deduplicar", items, cx);
+        self.open_review(
+            t!("Deduplicar modelos", "Deduplicate models"),
+            t!("Deduplicar", "Deduplicate"),
+            items,
+            cx,
+        );
     }
 }
 
@@ -416,13 +445,19 @@ fn dedupe_finding(group: &DuplicateGroup) -> Finding {
         "ai.duplicates",
         LOCAL_AI,
         &group.sha256,
-        format!("Deduplicar {}", group.model_names.join(", ")),
+        tf!(
+            "Deduplicar {}",
+            "Deduplicate {}",
+            group.model_names.join(", ")
+        ),
     )
     .subtitle(keep.display().to_string())
-    .explanation(
+    .explanation(t!(
         "Copias idénticas del mismo archivo. Se sustituyen por clones APFS: todas las rutas siguen \
          funcionando y solo se liberan los bloques repetidos. No se pierde nada.",
-    )
+        "Identical copies of the same file. They are replaced with APFS clones: every path keeps \
+         working and only the repeated blocks are freed. Nothing is lost."
+    ))
     .size(group.reclaimable)
     .items(copies as u64)
     .risk(Risk::Safe)
@@ -436,9 +471,11 @@ fn dedupe_finding(group: &DuplicateGroup) -> Finding {
 /// when the files were written, so it says that instead.
 fn usage_text(model: &LocalModel, now: std::time::SystemTime) -> String {
     match (model.last_used_source, model.last_used) {
-        (UsageSignal::LoadedNow, _) => "Ahora".to_string(),
+        (UsageSignal::LoadedNow, _) => t!("Ahora", "Now").to_string(),
         (UsageSignal::RuntimeRecord, Some(when)) => human_age(when, now),
-        (UsageSignal::Modified, Some(when)) => format!("Bajado {}", human_age(when, now)),
+        (UsageSignal::Modified, Some(when)) => {
+            tf!("Bajado {}", "Downloaded {}", human_age(when, now))
+        }
         _ => "—".to_string(),
     }
 }
@@ -446,11 +483,19 @@ fn usage_text(model: &LocalModel, now: std::time::SystemTime) -> String {
 fn format_parameters(parameters: u64) -> String {
     let value = parameters as f64;
     if value >= 1e9 {
-        format!("{:.0} mil millones de parámetros", value / 1e9)
+        tf!(
+            "{:.0} mil millones de parámetros",
+            "{:.0} billion parameters",
+            value / 1e9
+        )
     } else if value >= 1e6 {
-        format!("{:.0} millones de parámetros", value / 1e6)
+        tf!(
+            "{:.0} millones de parámetros",
+            "{:.0} million parameters",
+            value / 1e6
+        )
     } else {
-        format!("{parameters} parámetros")
+        tf!("{parameters} parámetros", "{parameters} parameters")
     }
 }
 
@@ -505,20 +550,28 @@ fn runtime_chip(runtime: &RuntimeStatus) -> impl IntoElement {
         loaded.join(", ")
     } else if let Some(count) = runtime.loaded_count.filter(|count| *count > 0) {
         // Some runtimes only tell how many, not which.
-        let models = plural(count as usize, "modelo cargado", "modelos cargados");
+        let models = plural(
+            count as usize,
+            t!("modelo cargado", "model loaded"),
+            t!("modelos cargados", "models loaded"),
+        );
         match runtime.loaded_memory_bytes {
             Some(bytes) => format!("{models} ({})", human_memory(bytes)),
             None => models,
         }
     } else if runtime.running {
-        "Activo, sin modelos cargados".to_string()
+        t!("Activo, sin modelos cargados", "Running, no models loaded").to_string()
     } else if !runtime.kind.has_server() {
         // A folder of files, not something that runs: "stopped" would mean nothing here.
         human_size(runtime.storage_bytes)
     } else if runtime.storage_bytes > 0 {
-        format!("Parado · {}", human_size(runtime.storage_bytes))
+        tf!(
+            "Parado · {}",
+            "Stopped · {}",
+            human_size(runtime.storage_bytes)
+        )
     } else {
-        "Parado".to_string()
+        t!("Parado", "Stopped").to_string()
     };
     row()
         .max_w(px(420.))
@@ -576,12 +629,13 @@ fn render_duplicates_header(
         .child(
             row()
                 .justify_between()
-                .child(section_title(format!(
+                .child(section_title(tf!(
                     "Copias repetidas: {} recuperables",
+                    "Duplicate copies: {} reclaimable",
                     human_size(inventory.reclaimable_bytes)
                 )))
                 .child(
-                    Btn::primary("Deduplicar todo", theme::area_stops(LOCAL_AI))
+                    Btn::primary(t!("Deduplicar todo", "Deduplicate all"))
                         .size(BtnSize::Sm)
                         .icon(Icon::Copy)
                         .disabled(!can_dedupe)
@@ -596,9 +650,10 @@ fn render_duplicates_header(
                 .max_w(px(640.))
                 .fs(font::CAPTION)
                 .text_color(theme::text_2())
-                .child(
+                .child(t!(
                     "El mismo archivo guardado varias veces, normalmente por runtimes distintos. Deduplicar lo cambia por clones APFS: todas las rutas siguen funcionando, ningún modelo se rompe y el espacio se libera al momento. No se pierde nada.",
-                ),
+                    "The same file saved more than once, usually by different runtimes. Deduplicating swaps the copies for APFS clones: every path keeps working, no model breaks and the space is freed right away. Nothing is lost."
+                )),
         )
 }
 
@@ -627,8 +682,9 @@ fn render_duplicate(
                     clip()
                         .fs(font::MICRO)
                         .text_color(theme::text_3())
-                        .child(format!(
+                        .child(tf!(
                             "{copies} copias de {} cada una",
+                            "{copies} copies of {} each",
                             human_size(group.file_size)
                         )),
                 ),
@@ -643,7 +699,7 @@ fn render_duplicate(
                 .child(human_size(group.reclaimable)),
         )
         .child(if actionable {
-            Btn::secondary("Deduplicar")
+            Btn::secondary(t!("Deduplicar", "Deduplicate"))
                 .size(BtnSize::Sm)
                 .build(
                     ElementId::NamedInteger("dedupe".into(), position as u64),
@@ -651,8 +707,8 @@ fn render_duplicate(
                 )
                 .into_any_element()
         } else if group.reclaimable == 0 {
-            tag("Ya son clones").into_any_element()
+            tag(t!("Ya son clones", "Already clones")).into_any_element()
         } else {
-            tag("Fuera de tu carpeta").into_any_element()
+            tag(t!("Fuera de tu carpeta", "Outside your home folder")).into_any_element()
         })
 }

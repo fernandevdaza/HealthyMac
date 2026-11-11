@@ -2,7 +2,7 @@
 
 use anyhow::Result;
 use hm_core::fmt::human_size;
-use hm_core::{Action, Area, Finding, Recovery, Risk, ScanContext, Scanner};
+use hm_core::{t, tf, Action, Area, Finding, Recovery, Risk, ScanContext, Scanner};
 
 use super::full_disk_access_notice;
 use crate::docker;
@@ -23,7 +23,10 @@ impl Scanner for DockerScanner {
     }
 
     fn description(&self) -> &'static str {
-        "Imágenes, contenedores detenidos, volúmenes y caché de compilación que Docker podría liberar."
+        t!(
+            "Imágenes, contenedores detenidos, volúmenes y caché de compilación que Docker podría liberar.",
+            "Images, stopped containers, volumes and build cache that Docker could free."
+        )
     }
 
     fn area(&self) -> Area {
@@ -53,7 +56,12 @@ fn prune(args: &[&str]) -> Action {
     }
 }
 
-const RECLAIM_DELAY_NOTE: &str = "En Docker Desktop y similares, macOS puede tardar en recuperar el espacio, porque vive en una imagen de disco que se compacta poco a poco.";
+fn reclaim_delay_note() -> &'static str {
+    t!(
+        "En Docker Desktop y similares, macOS puede tardar en recuperar el espacio, porque vive en una imagen de disco que se compacta poco a poco.",
+        "With Docker Desktop and similar apps, macOS may take a while to get the space back, because Docker keeps it in a disk image that shrinks gradually."
+    )
+}
 
 fn findings_from(summary: &DockerSummary, unused_volumes: &[String]) -> Vec<Finding> {
     let mut found = Vec::new();
@@ -63,20 +71,34 @@ fn findings_from(summary: &DockerSummary, unused_volumes: &[String]) -> Vec<Find
                 ID,
                 Area::Developer,
                 "daemon_stopped",
-                format!("{} no está en marcha", summary.runtime),
+                tf!(
+                    "{} no está en marcha",
+                    "{} is not running",
+                    summary.runtime
+                ),
             )
-            .explanation(format!(
+            .explanation(tf!(
                 "Sin {} en marcha no se puede saber cuánto ocupan sus imágenes, contenedores y volúmenes, ni limpiarlos. HealthyMac nunca lo arranca por su cuenta: ábrelo y vuelve a escanear para verlo.",
+                "Without {} running there is no way to tell how much space its images, containers and volumes take, or to clean them. HealthyMac never starts it on its own: open it and scan again to see them.",
                 summary.runtime
             )),
         );
     } else if !summary.usage_known {
         found.push(
-            Finding::new(ID, Area::Developer, "usage_unknown", "Docker no informó de su uso de disco")
-                .explanation(format!(
-                    "{} está en marcha, pero «docker system df» no dio una respuesta válida a tiempo. Vuelve a escanear más tarde.",
-                    summary.runtime
-                )),
+            Finding::new(
+                ID,
+                Area::Developer,
+                "usage_unknown",
+                t!(
+                    "Docker no informó de su uso de disco",
+                    "Docker didn't report its disk usage"
+                ),
+            )
+            .explanation(tf!(
+                "{} está en marcha, pero «docker system df» no dio una respuesta válida a tiempo. Vuelve a escanear más tarde.",
+                "{} is running, but “docker system df” didn't give a valid answer in time. Scan again later.",
+                summary.runtime
+            )),
         );
     } else {
         found.extend(prune_findings(summary, unused_volumes));
@@ -91,19 +113,26 @@ fn inactive(usage: &DockerUsage) -> u64 {
 
 fn prune_findings(summary: &DockerSummary, unused_volumes: &[String]) -> Vec<Finding> {
     let mut found = Vec::new();
+    let note = reclaim_delay_note();
     let images = &summary.images;
     if images.reclaimable > 0 {
         found.push(
-            Finding::new(ID, Area::Developer, "images", "Imágenes sin usar")
+            Finding::new(
+                ID,
+                Area::Developer,
+                "images",
+                t!("Imágenes sin usar", "Unused images"),
+            )
                 .size(images.reclaimable)
                 .items(inactive(images))
                 .risk(Risk::Moderate)
                 .recovery(Recovery::Redownload)
                 .selected(false)
                 .action(prune(&["image", "prune", "-a", "-f"]))
-                .explanation(format!(
-                    "{} en total, {} en uso por algún contenedor. Se quitan las demás, y las que necesites se vuelven a descargar o construir. {RECLAIM_DELAY_NOTE}",
-                    util::count(images.count, "imagen", "imágenes"),
+                .explanation(tf!(
+                    "{} en total, {} en uso por algún contenedor. Se quitan las demás, y las que necesites se vuelven a descargar o construir. {note}",
+                    "{} in total, {} in use by a container. The rest are removed, and the ones you need are downloaded or built again. {note}",
+                    util::count(images.count, t!("imagen", "image"), t!("imágenes", "images")),
                     images.active
                 )),
         );
@@ -111,31 +140,47 @@ fn prune_findings(summary: &DockerSummary, unused_volumes: &[String]) -> Vec<Fin
     let cache = &summary.build_cache;
     if cache.reclaimable > 0 {
         found.push(
-            Finding::new(ID, Area::Developer, "build_cache", "Caché de compilación")
+            Finding::new(
+                ID,
+                Area::Developer,
+                "build_cache",
+                t!("Caché de compilación", "Build cache"),
+            )
                 .size(cache.reclaimable)
                 .items(inactive(cache))
                 .risk(Risk::Moderate)
                 .recovery(Recovery::Rebuild)
                 .selected(false)
                 .action(prune(&["builder", "prune", "-a", "-f"]))
-                .explanation(format!(
-                    "Capas guardadas para acelerar «docker build». No se pierde nada, pero la próxima compilación de cada imagen tardará bastante más. {RECLAIM_DELAY_NOTE}"
+                .explanation(tf!(
+                    "Capas guardadas para acelerar «docker build». No se pierde nada, pero la próxima compilación de cada imagen tardará bastante más. {note}",
+                    "Layers kept to speed up “docker build”. Nothing is lost, but the next build of each image will take quite a bit longer. {note}"
                 )),
         );
     }
     let containers = &summary.containers;
     if containers.reclaimable > 0 {
         found.push(
-            Finding::new(ID, Area::Developer, "containers", "Contenedores detenidos")
+            Finding::new(
+                ID,
+                Area::Developer,
+                "containers",
+                t!("Contenedores detenidos", "Stopped containers"),
+            )
                 .size(containers.reclaimable)
                 .items(inactive(containers))
                 .risk(Risk::Review)
                 .recovery(Recovery::None)
                 .selected(false)
                 .action(prune(&["container", "prune", "-f"]))
-                .explanation(format!(
-                    "{} detenidos. Lo que cada uno escribió fuera de un volumen se pierde al quitarlo, igual que sus registros. {RECLAIM_DELAY_NOTE}",
-                    util::count(inactive(containers), "contenedor", "contenedores"),
+                .explanation(tf!(
+                    "{} detenidos. Lo que cada uno escribió fuera de un volumen se pierde al quitarlo, igual que sus registros. {note}",
+                    "{} stopped. Whatever each one wrote outside a volume is lost when it is removed, and so are its logs. {note}",
+                    util::count(
+                        inactive(containers),
+                        t!("contenedor", "container"),
+                        t!("contenedores", "containers")
+                    ),
                 )),
         );
     }
@@ -148,23 +193,33 @@ fn prune_findings(summary: &DockerSummary, unused_volumes: &[String]) -> Vec<Fin
             .collect::<Vec<_>>()
             .join(", ");
         if unused_volumes.len() > 8 {
-            names = format!("{names} y {} más", unused_volumes.len() - 8);
+            names = tf!(
+                "{names} y {} más",
+                "{names} and {} more",
+                unused_volumes.len() - 8
+            );
         }
         let which = if names.is_empty() {
             String::new()
         } else {
-            format!(" Son: {names}.")
+            tf!(" Son: {names}.", " They are: {names}.")
         };
         found.push(
-            Finding::new(ID, Area::Developer, "volumes", "Volúmenes sin usar")
+            Finding::new(
+                ID,
+                Area::Developer,
+                "volumes",
+                t!("Volúmenes sin usar", "Unused volumes"),
+            )
                 .size(volumes.reclaimable)
                 .items(inactive(volumes))
                 .risk(Risk::Review)
                 .recovery(Recovery::None)
                 .selected(false)
                 .action(prune(&["volume", "prune", "-a", "-f"]))
-                .explanation(format!(
-                    "Volúmenes que ningún contenedor usa ahora.{which} Pueden guardar bases de datos y otros datos que no se pueden recuperar, aunque el proyecto esté parado solo por ahora. Revísalos antes de quitarlos."
+                .explanation(tf!(
+                    "Volúmenes que ningún contenedor usa ahora.{which} Pueden guardar bases de datos y otros datos que no se pueden recuperar, aunque el proyecto esté parado solo por ahora. Revísalos antes de quitarlos.",
+                    "Volumes no container is using right now.{which} They can hold databases and other data that can't be recovered, even if the project is only idle for now. Review them before removing them."
                 )),
         );
     }
@@ -181,15 +236,17 @@ fn disk_image_finding(summary: &DockerSummary) -> Option<Finding> {
             ID,
             Area::Developer,
             "disk_image",
-            format!(
+            tf!(
                 "Imagen de disco de {}: {}",
+                "{} disk image: {}",
                 summary.runtime,
                 human_size(summary.disk_image_bytes)
             ),
         )
         .subtitle(path.display().to_string())
-        .explanation(format!(
+        .explanation(tf!(
             "Aquí viven las imágenes, los contenedores y los volúmenes, por eso no se puede borrar sin perderlos todos. Ocupa {} en disco, a menudo más de lo que informa Docker porque no siempre devuelve a macOS el espacio liberado.",
+            "Images, containers and volumes live here, so it can't be deleted without losing them all. It takes up {} on disk, often more than Docker reports, because Docker doesn't always give freed space back to macOS.",
             human_size(summary.disk_image_bytes)
         )),
     )
