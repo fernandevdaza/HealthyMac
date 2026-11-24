@@ -11,6 +11,7 @@ mod pages;
 mod state;
 mod theme;
 mod ui;
+mod update;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -36,7 +37,8 @@ actions!(
         Minimize,
         Zoom,
         CloseWindow,
-        OpenSettings
+        OpenSettings,
+        CheckForUpdates
     ]
 );
 
@@ -68,6 +70,10 @@ pub fn menus() -> Vec<Menu> {
             name: "HealthyMac".into(),
             items: vec![
                 MenuItem::action(t!("Ajustes…", "Settings…"), OpenSettings),
+                MenuItem::action(
+                    t!("Buscar actualizaciones…", "Check for Updates…"),
+                    CheckForUpdates,
+                ),
                 MenuItem::separator(),
                 MenuItem::os_submenu(t!("Servicios", "Services"), SystemMenuType::Services),
                 MenuItem::separator(),
@@ -196,6 +202,7 @@ fn main() {
                             };
                             shell.watch_appearance(window, cx);
                             shell.start_background_loops(cx);
+                            shell.start_update_checks(cx);
                             #[cfg(debug_assertions)]
                             drive::start(window, cx);
                             shell
@@ -210,6 +217,14 @@ fn main() {
             cx.on_action(move |_: &OpenSettings, cx| {
                 window
                     .update(cx, |shell, _, cx| shell.navigate(Page::Ajustes, cx))
+                    .ok();
+            });
+            cx.on_action(move |_: &CheckForUpdates, cx| {
+                window
+                    .update(cx, |shell, _, cx| {
+                        shell.navigate(Page::Ajustes, cx);
+                        shell.check_for_updates(true, cx);
+                    })
                     .ok();
             });
             cx.on_action(move |_: &Minimize, cx| {

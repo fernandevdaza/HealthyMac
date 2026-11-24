@@ -11,8 +11,8 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/versión-0.1.0-6e6e73?style=flat-square&labelColor=3a3a3c" alt="versión 0.1.0">
-  <img src="https://img.shields.io/badge/tests-672%20pasan-248a3d?style=flat-square&labelColor=3a3a3c" alt="672 tests que pasan">
+  <img src="https://img.shields.io/badge/versión-0.2.0-6e6e73?style=flat-square&labelColor=3a3a3c" alt="versión 0.2.0">
+  <img src="https://img.shields.io/badge/tests-680%20pasan-248a3d?style=flat-square&labelColor=3a3a3c" alt="680 tests que pasan">
   <img src="https://img.shields.io/badge/runtimes%20de%20IA-14-6e6e73?style=flat-square&labelColor=3a3a3c" alt="14 runtimes de IA">
   <img src="https://img.shields.io/badge/páginas-12-6e6e73?style=flat-square&labelColor=3a3a3c" alt="12 páginas">
   <img src="https://img.shields.io/badge/interfaz-español%20%7C%20inglés-6e6e73?style=flat-square&labelColor=3a3a3c" alt="Interfaz en español e inglés">
@@ -34,14 +34,15 @@
 
 <div align="center">
 
-| **Tamaños reales** | **14 runtimes de IA** | **Primero a la Papelera** | **672 tests** | **12 MB** |
+| **Tamaños reales** | **14 runtimes de IA** | **Primero a la Papelera** | **680 tests** | **12 MB** |
 |:---:|:---:|:---:|:---:|:---:|
 | cuenta los clones APFS y los enlaces duros | un solo inventario, comparado con el límite de memoria de Metal | cada ruta se revalida justo antes de actuar | seguridad, escáneres y analizadores | ~1 % de CPU y ~100 MB de RAM en reposo |
 
 </div>
 
-> **Nada sale de tu Mac.** Sin cuenta, sin suscripción y sin telemetría. Solo se conecta a los runtimes de IA en
-> `127.0.0.1`, para ver qué tienen cargado.
+> **Nada sobre ti sale de tu Mac.** Sin cuenta, sin suscripción y sin telemetría. Solo se conecta a los runtimes de IA
+> en `127.0.0.1`, para ver qué tienen cargado, y una vez al día a GitHub, para preguntar cuál es la última versión. Eso
+> se puede desactivar en Ajustes.
 
 > [!WARNING]
 > **Es una versión temprana, y borra cosas.** Las limpiezas reales solo se han hecho en un Mac (M5 Pro, macOS 27). Mira
@@ -74,6 +75,8 @@
 - **Se ve como una app de Mac.** Grises neutros y SF Pro; el color aparece solo cuando dice algo, como un nivel de
   riesgo, la presión de memoria o una serie en un gráfico. Claro u oscuro, español o inglés: sigue a macOS (si no está
   en español, se muestra en inglés), o lo eliges en Ajustes.
+- **Se mantiene al día.** Mira en GitHub una vez al día. Con un clic descarga la versión nueva, la comprueba con el
+  resumen SHA-256 que publica GitHub y se reinicia con ella.
 - **Línea de comandos.** `healthymac scan --json` y compañía, para tus scripts.
 
 ## 📸 Capturas
@@ -113,6 +116,9 @@ Eso instala la última versión en `/Applications`. ¿Lo prefieres a mano? Desca
 > HealthyMac tiene firma ad hoc, no está notarizada: para eso hace falta un Apple Developer ID de pago. macOS bloquea una
 > app así cuando se ha descargado con el navegador. Para abrirla, ejecuta `xattr -cr /Applications/HealthyMac.app` o
 > permítela en *Ajustes del Sistema → Privacidad y seguridad*. La instalación por Terminal no necesita esto.
+
+Desde la 0.2.0, la app se actualiza sola desde *Ajustes → Actualizaciones* o *HealthyMac → Buscar actualizaciones…*. La
+0.1.0 no trae actualizador: ejecuta el comando de arriba una vez más para tenerlo.
 
 ## 🚀 Primeros pasos
 
@@ -159,7 +165,7 @@ cargo test --workspace
 | `hm-ai` | 192 | Lectura de GGUF, almacenes de modelos, encaje en memoria, duplicados, runtimes |
 | `hm-dev` | 154 | Reglas de artefactos y actividad de proyectos, cachés de paquetes, Docker, puertos |
 | `hm-core` | 72 | Política de seguridad, limpiador, tamaños APFS, clonado, la macro `t!` |
-| `hm-app` | 38 | Lógica de selección, disposición del treemap, agrupación de listas, recorte de textos |
+| `hm-app` | 46 | Lógica de selección, disposición del treemap, agrupación de listas, recorte de textos, el actualizador |
 | `hm-cli` | 1 | Idioma según la configuración regional |
 
 Otros dos tests usan la Papelera real, y están ignorados por defecto porque dejan archivos diminutos en ella.
@@ -169,6 +175,9 @@ Otros dos tests usan la Papelera real, y están ignorados por defecto porque dej
 
 **Probado solo con datos de prueba:** desinstalar una app, `ollama rm`, el modo con Acceso total al disco, y los almacenes
 de Ollama, Jan, GPT4All, ComfyUI, Automatic1111 y Draw Things.
+
+**El actualizador, de punta a punta contra un servidor local:** comprobar, descargar, verificar, reemplazar y reiniciar.
+Contra GitHub, solo la comprobación, porque todavía no hay una versión más nueva que instalar.
 
 **Sin probar:** otras versiones de macOS (declara 13+) y otros Macs.
 

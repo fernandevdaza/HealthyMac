@@ -43,6 +43,12 @@ quien usa IA local. UI en GPUI.
    formatea. Vale también para los escáneres, porque sus títulos y explicaciones los ve el usuario.
    Los tests corren en español, que es el idioma por defecto. Identificadores y comentarios en
    inglés.
+9. **Lo único que sale a internet es el actualizador** (`crates/hm-app/src/update.rs`): una
+   consulta diaria a la API de releases de GitHub, que se puede desactivar, y la descarga cuando el
+   usuario la pide. Antes de instalar comprueba el SHA-256 que publica GitHub, la firma, el bundle id
+   y la versión. `HEALTHYMAC_UPDATE_URL` lo apunta a un servidor local para probarlo de punta a punta.
+   Para que funcione, cada release necesita su `HealthyMac-mac-arm64.dmg` (`scripts/package.sh`) y
+   la etiqueta `vX.Y.Z` igual a la versión del workspace.
 
 ## Modelo
 

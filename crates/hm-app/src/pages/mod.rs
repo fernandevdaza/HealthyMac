@@ -57,6 +57,10 @@ impl Render for Shell {
                     this.navigate(Page::Ajustes, cx)
                 }),
             )
+            .on_action(cx.listener(|this, _: &crate::CheckForUpdates, _, cx| {
+                this.navigate(Page::Ajustes, cx);
+                this.check_for_updates(true, cx);
+            }))
             .on_action(|_: &crate::Minimize, window, _| window.minimize_window())
             .on_action(|_: &crate::Zoom, window, _| window.zoom_window())
             .on_action(|_: &crate::CloseWindow, window, _| window.remove_window())

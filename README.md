@@ -11,8 +11,8 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.1.0-6e6e73?style=flat-square&labelColor=3a3a3c" alt="version 0.1.0">
-  <img src="https://img.shields.io/badge/tests-672%20passing-248a3d?style=flat-square&labelColor=3a3a3c" alt="672 tests passing">
+  <img src="https://img.shields.io/badge/version-0.2.0-6e6e73?style=flat-square&labelColor=3a3a3c" alt="version 0.2.0">
+  <img src="https://img.shields.io/badge/tests-680%20passing-248a3d?style=flat-square&labelColor=3a3a3c" alt="680 tests passing">
   <img src="https://img.shields.io/badge/AI%20runtimes-14-6e6e73?style=flat-square&labelColor=3a3a3c" alt="14 AI runtimes">
   <img src="https://img.shields.io/badge/pages-12-6e6e73?style=flat-square&labelColor=3a3a3c" alt="12 pages">
   <img src="https://img.shields.io/badge/UI-English%20%7C%20Spanish-6e6e73?style=flat-square&labelColor=3a3a3c" alt="Interface in English and Spanish">
@@ -34,14 +34,15 @@
 
 <div align="center">
 
-| **Real sizes** | **14 AI runtimes** | **Trash first** | **672 tests** | **12 MB** |
+| **Real sizes** | **14 AI runtimes** | **Trash first** | **680 tests** | **12 MB** |
 |:---:|:---:|:---:|:---:|:---:|
 | APFS clones and hard links accounted for | one inventory, checked against Metal's memory limit | every path re-checked right before acting | safety, scanners and parsers | ~1% CPU and ~100 MB of RAM at rest |
 
 </div>
 
-> **Nothing leaves your Mac.** No account, no subscription, no telemetry. The only network connections it makes are to
-> AI runtimes on `127.0.0.1`, to see what they have loaded.
+> **Nothing about you leaves your Mac.** No account, no subscription, no telemetry. It only connects to AI runtimes on
+> `127.0.0.1`, to see what they have loaded, and once a day to GitHub, to ask which version is the latest. You can turn
+> that off in Settings.
 
 > [!WARNING]
 > **This is an early release, and it deletes things.** Real cleanups have only run on one Mac (M5 Pro, macOS 27). See
@@ -73,6 +74,8 @@
 - **Looks like a Mac app.** Neutral greys and SF Pro; colour shows up only when it says something, like a risk level,
   memory pressure or a series in a chart. Light or dark, English or Spanish: it follows macOS (English for any language
   other than Spanish), or you choose in Settings.
+- **Keeps itself up to date.** It checks GitHub once a day. One click downloads the new version, checks it against
+  the digest GitHub publishes, and restarts into it.
 - **A command line.** `healthymac scan --json` and friends, for scripts.
 
 ## 📸 Screenshots
@@ -112,6 +115,9 @@ That installs the latest release in `/Applications`. Prefer doing it by hand? Do
 > HealthyMac is signed ad hoc, not notarized: that takes a paid Apple Developer ID. macOS blocks an app like that when
 > it was downloaded with a browser. To open it, run `xattr -cr /Applications/HealthyMac.app`, or allow it in
 > *System Settings → Privacy & Security*. The Terminal install above doesn't need this.
+
+From 0.2.0 on, the app updates itself from *Settings → Updates* or *HealthyMac → Check for Updates…*. Version 0.1.0 has
+no updater: run the command above once more to get it.
 
 ## 🚀 Quick start
 
@@ -158,7 +164,7 @@ cargo test --workspace
 | `hm-ai` | 192 | GGUF parsing, model stores, memory fit, duplicates, runtimes |
 | `hm-dev` | 154 | Artifact rules and project activity, package caches, Docker, ports |
 | `hm-core` | 72 | Safety policy, cleaner, APFS sizes, cloning, the `t!` macro |
-| `hm-app` | 38 | Selection logic, treemap layout, list grouping, text truncation |
+| `hm-app` | 46 | Selection logic, treemap layout, list grouping, text truncation, the updater |
 | `hm-cli` | 1 | Language from the locale |
 
 Two more tests exercise the real Trash, and are ignored by default because they leave tiny files in it.
@@ -168,6 +174,9 @@ Two more tests exercise the real Trash, and are ignored by default because they 
 
 **Only tested against fixtures:** uninstalling an app, `ollama rm`, Full Disk Access mode, and the Ollama, Jan, GPT4All,
 ComfyUI, Automatic1111 and Draw Things stores.
+
+**The updater, end to end against a local server:** check, download, digest, swap and restart. Against GitHub, only the
+check, because there is no newer release to install yet.
 
 **Not tested:** other macOS versions (it declares 13+) and other Macs.
 

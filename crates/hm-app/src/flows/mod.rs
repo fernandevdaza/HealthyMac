@@ -6,6 +6,7 @@ pub mod language;
 pub mod live;
 pub mod load;
 pub mod scan;
+pub mod update;
 
 use std::panic::{catch_unwind, AssertUnwindSafe};
 

@@ -439,6 +439,7 @@ pub struct SettingsState {
     pub history: Loaded<Vec<hm_core::audit::AuditEntry>>,
     pub full_disk_access: Option<bool>,
     pub save_error: Option<String>,
+    pub update: crate::flows::update::UpdateState,
 }
 
 // ---- The shell ---------------------------------------------------------------------------------

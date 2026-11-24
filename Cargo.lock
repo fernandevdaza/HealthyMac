@@ -2581,7 +2581,7 @@ dependencies = [
 
 [[package]]
 name = "hm-ai"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "hm-core",
@@ -2594,7 +2594,7 @@ dependencies = [
 
 [[package]]
 name = "hm-app"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "futures",
@@ -2604,11 +2604,15 @@ dependencies = [
  "hm-dev",
  "hm-system",
  "icns",
+ "libc",
+ "serde",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]
 name = "hm-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -2622,7 +2626,7 @@ dependencies = [
 
 [[package]]
 name = "hm-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "libc",
@@ -2637,7 +2641,7 @@ dependencies = [
 
 [[package]]
 name = "hm-dev"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "hm-core",
@@ -2651,7 +2655,7 @@ dependencies = [
 
 [[package]]
 name = "hm-system"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "hm-core",

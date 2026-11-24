@@ -8,12 +8,14 @@ use hm_core::{t, tf, Appearance, CleanStatus, LanguageChoice, RemovalMode};
 
 use super::{plural, scroll_pane};
 use crate::assets::Icon;
+use crate::flows::update::UpdateState;
 use crate::state::Shell;
 use crate::theme::{self, font, radius, sp, GUTTER};
 use crate::ui::chrome::{card, notice, page_header, section_title, NoticeKind};
-use crate::ui::controls::{icon_button, pill, segmented, stepper, Btn, BtnSize};
+use crate::ui::controls::{icon_button, pill, segmented, spinner, stepper, toggle, Btn, BtnSize};
 use crate::ui::label::path_label;
 use crate::ui::{col, icon, row, TextExt};
+use crate::update;
 
 impl Shell {
     pub fn render_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
@@ -61,6 +63,7 @@ impl Shell {
                     .child(self.render_appearance(cx))
                     .child(self.render_removal_mode(cx))
                     .child(self.render_access(cx))
+                    .child(self.render_updates(cx))
                     .child(self.render_project_settings(cx))
                     .child(self.render_excluded(cx))
                     .child(self.render_history()),
@@ -213,6 +216,198 @@ impl Shell {
                         }),
                 ),
         )
+    }
+
+    fn render_updates(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let automatic = self.ctx.config.check_updates;
+        section(t!("Actualizaciones", "Updates"))
+            .child(setting_row(
+                t!("Buscar actualizaciones solo", "Check for updates automatically"),
+                t!(
+                    "Una vez al día, entre las versiones publicadas en GitHub. Solo se pregunta cuál es la última.",
+                    "Once a day, among the releases published on GitHub. All it asks is which one is the latest."
+                ),
+                toggle(
+                    "auto-updates",
+                    automatic,
+                    theme::green(),
+                    cx.listener(|this, _, _, cx| {
+                        this.update_config(cx, |config| config.check_updates = !config.check_updates);
+                    }),
+                )
+                .into_any_element(),
+            ))
+            .child(self.render_update_status(cx))
+    }
+
+    fn render_update_status(&self, cx: &mut Context<Self>) -> AnyElement {
+        let current = update::current_version();
+        if let UpdateState::Failed { message, release } = &self.settings.update {
+            let retry_install = release.is_some();
+            return notice(
+                NoticeKind::Error,
+                if retry_install {
+                    t!(
+                        "No se ha podido instalar la actualización",
+                        "The update couldn't be installed"
+                    )
+                } else {
+                    t!(
+                        "No hemos podido buscar actualizaciones",
+                        "We couldn't check for updates"
+                    )
+                },
+                Some(message.clone().into()),
+                Some(
+                    Btn::secondary(t!("Reintentar", "Try again"))
+                        .size(BtnSize::Sm)
+                        .icon(Icon::Refresh)
+                        .build(
+                            "update-retry",
+                            cx.listener(move |this, _, _, cx| {
+                                if retry_install {
+                                    this.install_update(cx);
+                                } else {
+                                    this.check_for_updates(true, cx);
+                                }
+                            }),
+                        )
+                        .into_any_element(),
+                ),
+            )
+            .into_any_element();
+        }
+
+        let check_button = || {
+            Btn::secondary(t!("Buscar ahora", "Check now"))
+                .size(BtnSize::Sm)
+                .icon(Icon::Refresh)
+                .build(
+                    "update-check",
+                    cx.listener(|this, _, _, cx| this.check_for_updates(true, cx)),
+                )
+                .into_any_element()
+        };
+        let working = |id: &'static str| spinner(id, 18.0, theme::text_2()).into_any_element();
+
+        let (mark, title, detail, actions): (AnyElement, String, Vec<String>, Vec<AnyElement>) =
+            match &self.settings.update {
+                UpdateState::Idle | UpdateState::UpToDate | UpdateState::Failed { .. } => {
+                    let up_to_date = matches!(self.settings.update, UpdateState::UpToDate);
+                    let detail = if self.mode.demo {
+                        t!("En el modo demo no se buscan actualizaciones.", "Demo mode doesn't look for updates.")
+                    } else if up_to_date {
+                        t!("Es la última versión.", "It's the latest version.")
+                    } else {
+                        t!(
+                            "Todavía no hemos mirado si hay una versión más nueva.",
+                            "We haven't looked for a newer version yet."
+                        )
+                    };
+                    (
+                        icon(
+                            Icon::Check,
+                            18.0,
+                            if up_to_date { theme::green() } else { theme::text_3() },
+                        )
+                        .into_any_element(),
+                        format!("HealthyMac {current}"),
+                        vec![detail.to_string()],
+                        if self.mode.demo { Vec::new() } else { vec![check_button()] },
+                    )
+                }
+                UpdateState::Checking => (
+                    working("update-checking"),
+                    t!("Buscando actualizaciones…", "Checking for updates…").to_string(),
+                    vec![tf!("Tienes la {current}.", "You have {current}.")],
+                    Vec::new(),
+                ),
+                UpdateState::Installing(release) => (
+                    working("update-installing"),
+                    tf!("Instalando la {}…", "Installing {}…", release.version),
+                    vec![t!(
+                        "Descargamos la versión nueva y comprobamos que es la publicada. Después la app se cierra y vuelve a abrirse sola.",
+                        "We download the new version and check it's the one published. Then the app quits and opens again by itself."
+                    )
+                    .to_string()],
+                    Vec::new(),
+                ),
+                UpdateState::Available(release) => {
+                    let mut detail = Vec::new();
+                    let summary = update::summary(&release.notes, 220);
+                    if !summary.is_empty() {
+                        detail.push(summary);
+                    }
+                    let blocker = self.update_blocker();
+                    match &blocker {
+                        Some(reason) => detail.push(reason.clone()),
+                        None => detail.push(
+                            t!(
+                                "Como la app no está firmada con un Developer ID, macOS puede olvidar los permisos que le diste, como el Acceso total al disco, y habrá que volver a darlos.",
+                                "Because the app isn't signed with a Developer ID, macOS may forget the permissions you gave it, such as Full Disk Access, and you'll have to grant them again."
+                            )
+                            .to_string(),
+                        ),
+                    }
+                    let page = release.page.clone();
+                    (
+                        icon(Icon::Download, 18.0, theme::blue()).into_any_element(),
+                        tf!(
+                            "Hay una versión nueva: {} (tienes la {current})",
+                            "A new version is out: {} (you have {current})",
+                            release.version
+                        ),
+                        detail,
+                        vec![
+                            Btn::primary(t!("Instalar y reiniciar", "Install and restart"))
+                                .size(BtnSize::Sm)
+                                .disabled(blocker.is_some())
+                                .build(
+                                    "update-install",
+                                    cx.listener(|this, _, _, cx| this.install_update(cx)),
+                                )
+                                .into_any_element(),
+                            Btn::secondary(t!("Novedades", "What's new"))
+                                .size(BtnSize::Sm)
+                                .icon(Icon::External)
+                                .build("update-notes", move |_, _, cx| cx.open_url(&page))
+                                .into_any_element(),
+                        ],
+                    )
+                }
+            };
+
+        card()
+            .w_full()
+            .p(sp(3.5))
+            .child(
+                row()
+                    .gap(sp(3.))
+                    .items_start()
+                    .child(div().mt(px(1.)).child(mark))
+                    .child(
+                        col()
+                            .flex_1()
+                            .min_w(px(0.))
+                            .gap(sp(0.5))
+                            .child(
+                                div()
+                                    .fs(font::BODY)
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .child(title),
+                            )
+                            .children(detail.into_iter().map(|line| {
+                                div()
+                                    .fs(font::CAPTION)
+                                    .text_color(theme::text_2())
+                                    .child(line)
+                            })),
+                    )
+                    .when(!actions.is_empty(), |this| {
+                        this.child(row().flex_none().gap(sp(2.)).children(actions))
+                    }),
+            )
+            .into_any_element()
     }
 
     fn render_appearance(&self, cx: &mut Context<Self>) -> impl IntoElement {

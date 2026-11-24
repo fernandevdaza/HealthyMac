@@ -6,7 +6,7 @@ use gpui::{
     div, img, prelude::*, px, AnyElement, Context, FontWeight, Image, ImageFormat, SharedString,
 };
 use hm_core::fmt::human_size;
-use hm_core::{t, Area};
+use hm_core::{t, tf, Area};
 
 use crate::assets::Icon;
 use crate::logic::selection::reclaimable_by_area;
@@ -135,6 +135,7 @@ impl Shell {
             ))
             .child(self.nav_item(Page::Monitor, Icon::Activity, "Monitor", None, cx))
             .child(div().flex_1().min_h(px(8.)))
+            .when_some(self.update_banner(cx), |this, banner| this.child(banner))
             .when_some(self.mode_badges(), |this, badges| this.child(badges))
             .child(self.nav_item(
                 Page::Ajustes,
@@ -201,6 +202,55 @@ impl Shell {
                     .whitespace_nowrap()
                     .child(text)
             }))
+    }
+
+    /// A new version is waiting. Opens Settings, where it can be installed.
+    fn update_banner(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let installing = matches!(
+            self.settings.update,
+            crate::flows::update::UpdateState::Installing(_)
+        );
+        let release = match &self.settings.update {
+            crate::flows::update::UpdateState::Available(release)
+            | crate::flows::update::UpdateState::Installing(release) => release,
+            _ => return None,
+        };
+        Some(
+            row()
+                .id("update-banner")
+                .mb(sp(2.))
+                .gap(sp(2.))
+                .px(sp(2.5))
+                .py(sp(2.))
+                .rounded(px(radius::MD))
+                .bg(theme::surface_2())
+                .cursor_pointer()
+                .hover(|style| style.bg(theme::surface_3()))
+                .on_click(cx.listener(|this, _, _, cx| this.navigate(Page::Ajustes, cx)))
+                .child(icon(Icon::Download, 14.0, theme::blue()))
+                .child(
+                    col()
+                        .flex_1()
+                        .min_w(px(0.))
+                        .child(
+                            div()
+                                .fs(font::MICRO)
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .text_color(theme::text_1())
+                                .child(if installing {
+                                    t!("Instalando actualización…", "Installing update…")
+                                } else {
+                                    t!("Actualización disponible", "Update available")
+                                }),
+                        )
+                        .child(div().fs(font::MICRO).text_color(theme::text_3()).child(tf!(
+                            "Versión {}",
+                            "Version {}",
+                            release.version
+                        ))),
+                )
+                .into_any_element(),
+        )
     }
 
     /// Permanently visible while nothing real can happen, so a screenshot can never mislead.

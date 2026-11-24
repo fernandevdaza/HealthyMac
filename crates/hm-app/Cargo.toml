@@ -19,6 +19,12 @@ hm-system.workspace = true
 hm-dev.workspace = true
 hm-ai.workspace = true
 anyhow.workspace = true
+libc.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 gpui.workspace = true
 futures = "0.3.34"
 icns = "0.3.1"
+
+[dev-dependencies]
+tempfile.workspace = true

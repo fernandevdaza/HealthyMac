@@ -47,6 +47,7 @@ icons! {
     ChevronRight => "caret-right",
     ChevronDown => "caret-down",
     ArrowUp => "arrow-up",
+    Download => "download-simple",
     X => "x",
     Plus => "plus",
     Trash => "trash",

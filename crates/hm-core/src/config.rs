@@ -52,6 +52,8 @@ pub struct Config {
     pub removal_mode: RemovalMode,
     pub appearance: Appearance,
     pub language: LanguageChoice,
+    /// Look for a newer release on GitHub once a day.
+    pub check_updates: bool,
 }
 
 impl Default for Config {
@@ -64,6 +66,7 @@ impl Default for Config {
             removal_mode: RemovalMode::Trash,
             appearance: Appearance::System,
             language: LanguageChoice::System,
+            check_updates: true,
         }
     }
 }
