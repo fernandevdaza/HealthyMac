@@ -322,7 +322,7 @@ impl Shell {
                     vec![tf!("Tienes la {current}.", "You have {current}.")],
                     Vec::new(),
                 ),
-                UpdateState::Installing(release) => (
+                UpdateState::Installing { release, .. } => (
                     working("update-installing"),
                     tf!("Instalando la {}…", "Installing {}…", release.version),
                     vec![t!(
@@ -377,6 +377,13 @@ impl Shell {
                 }
             };
 
+        let below = match &self.settings.update {
+            UpdateState::Installing { release, progress } => {
+                Some(install_progress(release, progress))
+            }
+            _ => None,
+        };
+
         card()
             .w_full()
             .p(sp(3.5))
@@ -401,7 +408,8 @@ impl Shell {
                                     .fs(font::CAPTION)
                                     .text_color(theme::text_2())
                                     .child(line)
-                            })),
+                            }))
+                            .children(below),
                     )
                     .when(!actions.is_empty(), |this| {
                         this.child(row().flex_none().gap(sp(2.)).children(actions))
@@ -702,6 +710,43 @@ impl Shell {
                 .into_any_element()
         })
     }
+}
+
+/// The bar and the figures while an update downloads, then what happens after.
+fn install_progress(release: &update::Release, progress: &update::Progress) -> AnyElement {
+    let total = release.asset.as_ref().map_or(0, |asset| asset.size);
+    let downloaded = progress.downloaded().min(total);
+    let verifying = progress.verifying();
+    let fraction = if verifying || total == 0 {
+        1.0
+    } else {
+        downloaded as f32 / total as f32
+    };
+    col()
+        .mt(sp(2.))
+        .gap(sp(1.5))
+        .child(crate::ui::charts::progress_bar(
+            fraction,
+            theme::primary(),
+            6.0,
+        ))
+        .child(
+            div()
+                .fs(font::CAPTION)
+                .tabular()
+                .text_color(theme::text_2())
+                .child(if verifying {
+                    t!("Comprobando la versión nueva…", "Checking the new version…").to_string()
+                } else {
+                    tf!(
+                        "Descargando: {} de {}",
+                        "Downloading: {} of {}",
+                        human_size(downloaded),
+                        human_size(total)
+                    )
+                }),
+        )
+        .into_any_element()
 }
 
 fn section(title: &'static str) -> gpui::Div {

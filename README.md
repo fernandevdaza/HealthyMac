@@ -11,8 +11,8 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.2.0-6e6e73?style=flat-square&labelColor=3a3a3c" alt="version 0.2.0">
-  <img src="https://img.shields.io/badge/tests-680%20passing-248a3d?style=flat-square&labelColor=3a3a3c" alt="680 tests passing">
+  <img src="https://img.shields.io/badge/version-0.2.1-6e6e73?style=flat-square&labelColor=3a3a3c" alt="version 0.2.1">
+  <img src="https://img.shields.io/badge/tests-681%20passing-248a3d?style=flat-square&labelColor=3a3a3c" alt="681 tests passing">
   <img src="https://img.shields.io/badge/AI%20runtimes-14-6e6e73?style=flat-square&labelColor=3a3a3c" alt="14 AI runtimes">
   <img src="https://img.shields.io/badge/pages-12-6e6e73?style=flat-square&labelColor=3a3a3c" alt="12 pages">
   <img src="https://img.shields.io/badge/UI-English%20%7C%20Spanish-6e6e73?style=flat-square&labelColor=3a3a3c" alt="Interface in English and Spanish">
@@ -34,7 +34,7 @@
 
 <div align="center">
 
-| **Real sizes** | **14 AI runtimes** | **Trash first** | **680 tests** | **12 MB** |
+| **Real sizes** | **14 AI runtimes** | **Trash first** | **681 tests** | **12 MB** |
 |:---:|:---:|:---:|:---:|:---:|
 | APFS clones and hard links accounted for | one inventory, checked against Metal's memory limit | every path re-checked right before acting | safety, scanners and parsers | ~1% CPU and ~100 MB of RAM at rest |
 
@@ -164,7 +164,7 @@ cargo test --workspace
 | `hm-ai` | 192 | GGUF parsing, model stores, memory fit, duplicates, runtimes |
 | `hm-dev` | 154 | Artifact rules and project activity, package caches, Docker, ports |
 | `hm-core` | 72 | Safety policy, cleaner, APFS sizes, cloning, the `t!` macro |
-| `hm-app` | 46 | Selection logic, treemap layout, list grouping, text truncation, the updater |
+| `hm-app` | 47 | Selection logic, treemap layout, list grouping, text truncation, the updater |
 | `hm-cli` | 1 | Language from the locale |
 
 Two more tests exercise the real Trash, and are ignored by default because they leave tiny files in it.

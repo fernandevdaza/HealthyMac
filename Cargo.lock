@@ -2581,7 +2581,7 @@ dependencies = [
 
 [[package]]
 name = "hm-ai"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "hm-core",
@@ -2594,7 +2594,7 @@ dependencies = [
 
 [[package]]
 name = "hm-app"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "futures",
@@ -2612,7 +2612,7 @@ dependencies = [
 
 [[package]]
 name = "hm-cli"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -2626,7 +2626,7 @@ dependencies = [
 
 [[package]]
 name = "hm-core"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "libc",
@@ -2641,7 +2641,7 @@ dependencies = [
 
 [[package]]
 name = "hm-dev"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "hm-core",
@@ -2655,7 +2655,7 @@ dependencies = [
 
 [[package]]
 name = "hm-system"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "hm-core",

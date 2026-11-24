@@ -206,15 +206,20 @@ impl Shell {
 
     /// A new version is waiting. Opens Settings, where it can be installed.
     fn update_banner(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let installing = matches!(
-            self.settings.update,
-            crate::flows::update::UpdateState::Installing(_)
-        );
-        let release = match &self.settings.update {
-            crate::flows::update::UpdateState::Available(release)
-            | crate::flows::update::UpdateState::Installing(release) => release,
+        use crate::flows::update::UpdateState;
+        let (release, progress) = match &self.settings.update {
+            UpdateState::Available(release) => (release, None),
+            UpdateState::Installing { release, progress } => (release, Some(progress)),
             _ => return None,
         };
+        let installing = progress.is_some();
+        // While it downloads, how far along it is; once it is being checked, nothing more precise.
+        let percent = progress
+            .filter(|progress| !progress.verifying())
+            .and_then(|progress| {
+                let total = release.asset.as_ref()?.size;
+                (total > 0).then(|| (progress.downloaded().min(total) * 100 / total) as u32)
+            });
         Some(
             row()
                 .id("update-banner")
@@ -243,11 +248,16 @@ impl Shell {
                                     t!("Actualización disponible", "Update available")
                                 }),
                         )
-                        .child(div().fs(font::MICRO).text_color(theme::text_3()).child(tf!(
-                            "Versión {}",
-                            "Version {}",
-                            release.version
-                        ))),
+                        .child(div().fs(font::MICRO).text_color(theme::text_3()).child(
+                            match percent {
+                                Some(percent) => tf!(
+                                    "Versión {} · {percent} %",
+                                    "Version {} · {percent}%",
+                                    release.version
+                                ),
+                                None => tf!("Versión {}", "Version {}", release.version),
+                            },
+                        )),
                 )
                 .into_any_element(),
         )

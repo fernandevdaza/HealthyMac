@@ -7,9 +7,11 @@
 //! leaves no quarantine flag behind, so Gatekeeper does not block the new version.
 
 use std::fmt;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::time::Duration;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context, Result};
 use hm_core::exec::{run, CmdOutput};
@@ -208,8 +210,27 @@ pub struct Staged {
     work: PathBuf,
 }
 
+/// How far an installation has got, written by the thread doing it and read by the interface.
+#[derive(Debug, Default)]
+pub struct Progress {
+    downloaded: AtomicU64,
+    verifying: AtomicBool,
+}
+
+impl Progress {
+    /// Bytes of the disk image downloaded so far.
+    pub fn downloaded(&self) -> u64 {
+        self.downloaded.load(Ordering::Relaxed)
+    }
+
+    /// The download is complete and the new version is being checked and unpacked.
+    pub fn verifying(&self) -> bool {
+        self.verifying.load(Ordering::Relaxed)
+    }
+}
+
 /// Downloads the release's disk image, checks it, and copies the app out of it. Blocks.
-pub fn download_and_stage(release: &Release) -> Result<Staged> {
+pub fn download_and_stage(release: &Release, progress: &Progress) -> Result<Staged> {
     let asset = release.asset.as_ref().context(t!(
         "Esta versión no trae un instalador para este Mac",
         "This release has no installer for this Mac"
@@ -220,22 +241,8 @@ pub fn download_and_stage(release: &Release) -> Result<Staged> {
 
     let image = work.join("HealthyMac.dmg");
     let image_arg = image.to_string_lossy().into_owned();
-    let output = run(
-        Path::new(CURL),
-        &[
-            "-fsSL",
-            "--max-time",
-            "900",
-            "-o",
-            image_arg.as_str(),
-            asset.url.as_str(),
-        ],
-        Duration::from_secs(905),
-    )?;
-    ensure_success(
-        &output,
-        t!("No se ha podido descargar", "The download failed"),
-    )?;
+    download(asset, &image, progress)?;
+    progress.verifying.store(true, Ordering::Relaxed);
     verify_download(&image, asset)?;
 
     let mount = work.join("mount");
@@ -296,6 +303,47 @@ fn detach(mount: &Path) {
             &["detach", "-quiet", "-force", mount.as_str()],
             Duration::from_secs(30),
         );
+    }
+}
+
+/// curl writes the file as it arrives, so its size on disk is how far the download has got.
+fn download(asset: &Asset, destination: &Path, progress: &Progress) -> Result<()> {
+    const LIMIT: Duration = Duration::from_secs(15 * 60);
+    let what = t!("No se ha podido descargar", "The download failed");
+    let mut child = Command::new(CURL)
+        .args(["-fsSL", "--max-time", "900", "-o"])
+        .arg(destination)
+        .arg(&asset.url)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .context(what)?;
+    let size_now = || std::fs::metadata(destination).map_or(0, |meta| meta.len());
+    let started = Instant::now();
+    let status = loop {
+        if let Some(status) = child.try_wait()? {
+            break status;
+        }
+        if started.elapsed() > LIMIT {
+            let _ = child.kill();
+            let _ = child.wait();
+            bail!(tf!("{what}: tardaba demasiado", "{what}: it took too long"));
+        }
+        progress.downloaded.store(size_now(), Ordering::Relaxed);
+        std::thread::sleep(Duration::from_millis(100));
+    };
+    progress.downloaded.store(size_now(), Ordering::Relaxed);
+    if status.success() {
+        return Ok(());
+    }
+    let mut reason = String::new();
+    if let Some(mut stderr) = child.stderr.take() {
+        let _ = stderr.read_to_string(&mut reason);
+    }
+    match reason.trim() {
+        "" => bail!("{what}"),
+        reason => bail!("{what}: {reason}"),
     }
 }
 
@@ -581,6 +629,35 @@ mod tests {
         assert!(verify_download(&file, &asset(4, None)).is_ok());
         assert!(verify_download(&file, &asset(5, Some(right))).is_err());
         assert!(verify_download(&file, &asset(4, Some(&right.replace('b', "c")))).is_err());
+    }
+
+    #[test]
+    fn downloads_with_curl_and_reports_how_much_has_arrived() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("source.dmg");
+        fs::write(&source, vec![7u8; 300_000]).unwrap();
+        let asset = Asset {
+            url: format!("file://{}", source.display()),
+            size: 300_000,
+            sha256: None,
+        };
+        let destination = dir.path().join("HealthyMac.dmg");
+        let progress = Progress::default();
+
+        download(&asset, &destination, &progress).unwrap();
+
+        assert_eq!(progress.downloaded(), 300_000);
+        assert_eq!(fs::read(&destination).unwrap(), fs::read(&source).unwrap());
+        assert!(!progress.verifying());
+
+        let missing = Asset {
+            url: format!("file://{}", dir.path().join("nope.dmg").display()),
+            ..asset
+        };
+        let error = download(&missing, &dir.path().join("x.dmg"), &Progress::default())
+            .unwrap_err()
+            .to_string();
+        assert!(error.starts_with("No se ha podido descargar"), "{error}");
     }
 
     /// A process that has exited and been reaped, as the app is once it quits.
