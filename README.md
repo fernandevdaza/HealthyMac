@@ -11,10 +11,10 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.2.1-6e6e73?style=flat-square&labelColor=3a3a3c" alt="version 0.2.1">
-  <img src="https://img.shields.io/badge/tests-681%20passing-248a3d?style=flat-square&labelColor=3a3a3c" alt="681 tests passing">
+  <img src="https://img.shields.io/badge/version-0.3.0-6e6e73?style=flat-square&labelColor=3a3a3c" alt="version 0.3.0">
+  <img src="https://img.shields.io/badge/tests-695%20passing-248a3d?style=flat-square&labelColor=3a3a3c" alt="695 tests passing">
   <img src="https://img.shields.io/badge/AI%20runtimes-14-6e6e73?style=flat-square&labelColor=3a3a3c" alt="14 AI runtimes">
-  <img src="https://img.shields.io/badge/pages-12-6e6e73?style=flat-square&labelColor=3a3a3c" alt="12 pages">
+  <img src="https://img.shields.io/badge/pages-13-6e6e73?style=flat-square&labelColor=3a3a3c" alt="13 pages">
   <img src="https://img.shields.io/badge/UI-English%20%7C%20Spanish-6e6e73?style=flat-square&labelColor=3a3a3c" alt="Interface in English and Spanish">
   <img src="https://img.shields.io/badge/theme-light%20%7C%20dark-6e6e73?style=flat-square&labelColor=3a3a3c" alt="Light and dark theme">
   <br>
@@ -34,7 +34,7 @@
 
 <div align="center">
 
-| **Real sizes** | **14 AI runtimes** | **Trash first** | **681 tests** | **12 MB** |
+| **Real sizes** | **14 AI runtimes** | **Trash first** | **695 tests** | **12 MB** |
 |:---:|:---:|:---:|:---:|:---:|
 | APFS clones and hard links accounted for | one inventory, checked against Metal's memory limit | every path re-checked right before acting | safety, scanners and parsers | ~1% CPU and ~100 MB of RAM at rest |
 
@@ -71,6 +71,9 @@
 - **Disk map and monitor.** A navigable treemap, plus CPU, memory, network, temperature, battery and processes.
 - **Apps and startup.** Size, leftovers and architecture of each app, an uninstaller, and startup items with the
   orphaned ones flagged.
+- **A security check-up, not an antivirus.** FileVault, SIP, Gatekeeper, the firewall, XProtect and pending updates,
+  plus what runs by itself: who signed each startup item, and why one deserves a look (no signature, a temporary or
+  hidden folder, a script that downloads code, an Apple name Apple didn't sign). It explains; it never removes.
 - **Looks like a Mac app.** Neutral greys and SF Pro; colour shows up only when it says something, like a risk level,
   memory pressure or a series in a chart. Light or dark, English or Spanish: it follows macOS (English for any language
   other than Spanish), or you choose in Settings.
@@ -160,7 +163,7 @@ cargo test --workspace
 
 | Crate | Tests | What it checks |
 |---|---:|---|
-| `hm-system` | 215 | Scanners, permission guards, health score, disk tree, monitor parsers |
+| `hm-system` | 229 | Scanners, permission guards, health score, disk tree, monitor parsers, security checks |
 | `hm-ai` | 192 | GGUF parsing, model stores, memory fit, duplicates, runtimes |
 | `hm-dev` | 154 | Artifact rules and project activity, package caches, Docker, ports |
 | `hm-core` | 72 | Safety policy, cleaner, APFS sizes, cloning, the `t!` macro |
@@ -196,7 +199,7 @@ scripts/package.sh                        # target/release/HealthyMac-mac-arm64.
 ```
 crates/
   hm-core/    contract, safety policy, cleaner (the only code that removes), audit log
-  hm-system/  system scanners, health score, disk tree, apps, startup, monitor
+  hm-system/  system scanners, health score, disk tree, apps, startup, security, monitor
   hm-dev/     Xcode, build artifacts, package caches, Docker, toolchains, projects, ports
   hm-ai/      model inventory, GGUF, memory fit, duplicates, runtimes
   hm-cli/     the `healthymac` command

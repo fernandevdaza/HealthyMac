@@ -11,10 +11,10 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/versión-0.2.1-6e6e73?style=flat-square&labelColor=3a3a3c" alt="versión 0.2.1">
-  <img src="https://img.shields.io/badge/tests-681%20pasan-248a3d?style=flat-square&labelColor=3a3a3c" alt="681 tests que pasan">
+  <img src="https://img.shields.io/badge/versión-0.3.0-6e6e73?style=flat-square&labelColor=3a3a3c" alt="versión 0.3.0">
+  <img src="https://img.shields.io/badge/tests-695%20pasan-248a3d?style=flat-square&labelColor=3a3a3c" alt="695 tests que pasan">
   <img src="https://img.shields.io/badge/runtimes%20de%20IA-14-6e6e73?style=flat-square&labelColor=3a3a3c" alt="14 runtimes de IA">
-  <img src="https://img.shields.io/badge/páginas-12-6e6e73?style=flat-square&labelColor=3a3a3c" alt="12 páginas">
+  <img src="https://img.shields.io/badge/páginas-13-6e6e73?style=flat-square&labelColor=3a3a3c" alt="13 páginas">
   <img src="https://img.shields.io/badge/interfaz-español%20%7C%20inglés-6e6e73?style=flat-square&labelColor=3a3a3c" alt="Interfaz en español e inglés">
   <img src="https://img.shields.io/badge/tema-claro%20%7C%20oscuro-6e6e73?style=flat-square&labelColor=3a3a3c" alt="Tema claro y oscuro">
   <br>
@@ -34,7 +34,7 @@
 
 <div align="center">
 
-| **Tamaños reales** | **14 runtimes de IA** | **Primero a la Papelera** | **681 tests** | **12 MB** |
+| **Tamaños reales** | **14 runtimes de IA** | **Primero a la Papelera** | **695 tests** | **12 MB** |
 |:---:|:---:|:---:|:---:|:---:|
 | cuenta los clones APFS y los enlaces duros | un solo inventario, comparado con el límite de memoria de Metal | cada ruta se revalida justo antes de actuar | seguridad, escáneres y analizadores | ~1 % de CPU y ~100 MB de RAM en reposo |
 
@@ -72,6 +72,10 @@
 - **Mapa de disco y monitor.** Un treemap navegable, además de CPU, memoria, red, temperatura, batería y procesos.
 - **Apps y arranque.** Tamaño, restos y arquitectura de cada app, un desinstalador, y los elementos de arranque con los
   huérfanos marcados.
+- **Una revisión de seguridad, no un antivirus.** FileVault, SIP, Gatekeeper, el firewall, XProtect y las actualizaciones
+  pendientes, y lo que se ejecuta solo: quién firmó cada elemento de arranque y por qué alguno merece una mirada (sin
+  firma, en una carpeta temporal u oculta, un script que descarga código, un nombre de Apple sin la firma de Apple).
+  Explica; nunca borra.
 - **Se ve como una app de Mac.** Grises neutros y SF Pro; el color aparece solo cuando dice algo, como un nivel de
   riesgo, la presión de memoria o una serie en un gráfico. Claro u oscuro, español o inglés: sigue a macOS (si no está
   en español, se muestra en inglés), o lo eliges en Ajustes.
@@ -161,7 +165,7 @@ cargo test --workspace
 
 | Crate | Tests | Qué comprueba |
 |---|---:|---|
-| `hm-system` | 215 | Escáneres, guardas de permisos, puntuación de salud, árbol de disco, analizadores del monitor |
+| `hm-system` | 229 | Escáneres, guardas de permisos, puntuación de salud, árbol de disco, analizadores del monitor, comprobaciones de seguridad |
 | `hm-ai` | 192 | Lectura de GGUF, almacenes de modelos, encaje en memoria, duplicados, runtimes |
 | `hm-dev` | 154 | Reglas de artefactos y actividad de proyectos, cachés de paquetes, Docker, puertos |
 | `hm-core` | 72 | Política de seguridad, limpiador, tamaños APFS, clonado, la macro `t!` |
@@ -197,7 +201,7 @@ scripts/package.sh                        # target/release/HealthyMac-mac-arm64.
 ```
 crates/
   hm-core/    contrato, política de seguridad, limpiador (el único código que borra), historial
-  hm-system/  escáneres del sistema, puntuación de salud, árbol de disco, apps, arranque, monitor
+  hm-system/  escáneres del sistema, puntuación de salud, árbol de disco, apps, arranque, seguridad, monitor
   hm-dev/     Xcode, artefactos, cachés de paquetes, Docker, toolchains, proyectos, puertos
   hm-ai/      inventario de modelos, GGUF, encaje en memoria, duplicados, runtimes
   hm-cli/     el comando `healthymac`

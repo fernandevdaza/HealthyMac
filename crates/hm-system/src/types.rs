@@ -230,6 +230,9 @@ pub struct StartupItem {
     pub kind: StartupKind,
     pub plist_path: PathBuf,
     pub program: Option<String>,
+    /// `ProgramArguments`, the program included. Empty when the plist only has `Program`.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub arguments: Vec<String>,
     pub run_at_load: bool,
     pub keep_alive: bool,
     pub disabled: bool,

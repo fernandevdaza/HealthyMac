@@ -71,6 +71,7 @@ pub enum Page {
     Puertos,
     Apps,
     Arranque,
+    Seguridad,
     Mapa,
     Monitor,
     Ajustes,
@@ -93,6 +94,7 @@ impl Page {
             Page::Mapa => 11,
             Page::Monitor => 12,
             Page::Ajustes => 13,
+            Page::Seguridad => 14,
         }
     }
 }
@@ -434,6 +436,12 @@ pub struct HoverTile {
 }
 
 #[derive(Default)]
+pub struct SecurityState {
+    pub report: Loaded<hm_system::security::SecurityReport>,
+    pub scroll: ScrollPane,
+}
+
+#[derive(Default)]
 pub struct SettingsState {
     pub scroll: ScrollPane,
     pub history: Loaded<Vec<hm_core::audit::AuditEntry>>,
@@ -475,6 +483,7 @@ pub struct Shell {
     pub startup: StartupState,
     pub disk: DiskState,
     pub settings: SettingsState,
+    pub security: SecurityState,
 
     pub sheet: Option<Sheet>,
     /// The sheet is playing its way out; it is removed when that ends.

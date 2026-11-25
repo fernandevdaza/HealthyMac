@@ -28,6 +28,7 @@ impl Shell {
             Page::Puertos if self.ports.ports.at.is_none() => self.load_ports(cx),
             Page::Apps if self.apps.apps.at.is_none() => self.load_apps(cx),
             Page::Arranque if self.startup.items.at.is_none() => self.load_startup(cx),
+            Page::Seguridad if self.security.report.at.is_none() => self.load_security(cx),
             Page::Mapa if self.disk.root.is_none() && !self.disk.loading => self.load_disk(cx),
             Page::Ajustes => self.load_settings(cx),
             _ => {}
@@ -289,6 +290,29 @@ impl Shell {
                 });
                 shell.startup.items.finish(result);
             },
+        );
+        cx.notify();
+    }
+
+    // ---- Security --------------------------------------------------------------------------------
+
+    pub fn load_security(&mut self, cx: &mut Context<Self>) {
+        if self.security.report.loading {
+            return;
+        }
+        self.security.report.begin();
+        let demo = self.mode.demo;
+        let ctx = self.fresh_ctx();
+        Shell::run_bg(
+            cx,
+            move || {
+                if demo {
+                    Ok(crate::demo::system::security())
+                } else {
+                    hm_system::security::report(&ctx)
+                }
+            },
+            |shell, result, _cx| shell.security.report.finish(result),
         );
         cx.notify();
     }

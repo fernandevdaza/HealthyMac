@@ -8,7 +8,7 @@ quien usa IA local. UI en GPUI.
 | Crate | Qué hace |
 |---|---|
 | `hm-core` | Contrato común: `Finding`, `Scanner`, `ScanContext`, `SafetyPolicy`, `Cleaner`. Único código que borra. |
-| `hm-system` | Basura de sistema, apps y restos, arranque, mapa de disco, monitor, puntuación de salud. |
+| `hm-system` | Basura de sistema, apps y restos, arranque, seguridad, mapa de disco, monitor, puntuación de salud. |
 | `hm-dev` | Xcode, artefactos de proyectos, cachés de paquetes, Docker, toolchains, puertos. |
 | `hm-ai` | Inventario de modelos, duplicados, metadatos GGUF, encaje en memoria, estado de runtimes. |
 | `hm-cli` | Binario `healthymac`: el motor sin UI. |

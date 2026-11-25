@@ -16,7 +16,7 @@ const LAUNCHCTL_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Interpreters whose real program is their first argument, so a launch agent that runs
 /// `/bin/sh /gone/script.sh` still counts as orphaned.
-const INTERPRETERS: &[&str] = &[
+pub(crate) const INTERPRETERS: &[&str] = &[
     "bash",
     "dash",
     "env",
@@ -95,6 +95,7 @@ fn parse_item(
         kind,
         plist_path: path.to_path_buf(),
         program: None,
+        arguments: Vec::new(),
         run_at_load: false,
         keep_alive: false,
         disabled: false,
@@ -121,6 +122,7 @@ fn parse_item(
                 .and_then(Value::as_string)
                 .map(str::to_string)
         });
+    item.arguments = arguments.clone();
     item.run_at_load = dict
         .get("RunAtLoad")
         .and_then(Value::as_boolean)
@@ -184,7 +186,7 @@ fn is_orphaned(
 
 /// The script or app an interpreter was given, if it is given as a path. Inline code (`sh -c`,
 /// `osascript -e`) has no file to check.
-fn interpreted_target(arguments: &[String]) -> Option<&str> {
+pub(crate) fn interpreted_target(arguments: &[String]) -> Option<&str> {
     for argument in arguments.iter().skip(1) {
         match argument.as_str() {
             "-c" | "-e" => return None,

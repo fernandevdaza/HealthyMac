@@ -126,6 +126,21 @@ impl Shell {
                 None,
                 cx,
             ))
+            .child(
+                self.nav_item(
+                    Page::Seguridad,
+                    Icon::Shield,
+                    t!("Seguridad", "Security"),
+                    self.security
+                        .report
+                        .data
+                        .as_ref()
+                        .map(|report| report.attention())
+                        .filter(|&count| count > 0)
+                        .map(|count| count.to_string()),
+                    cx,
+                ),
+            )
             .child(self.nav_item(
                 Page::Mapa,
                 Icon::Treemap,

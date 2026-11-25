@@ -77,6 +77,8 @@ enum Command {
     Apps,
     /// Agentes y daemons de arranque.
     Startup,
+    /// Protecciones de macOS y lo que arranca solo, con lo que merece una mirada. Solo lee.
+    Security,
     /// Una lectura del monitor del sistema y la puntuación de salud.
     Monitor,
 }
@@ -279,6 +281,7 @@ fn main() -> Result<()> {
         Command::Docker => dump(&hm_dev::docker::summary(&ctx))?,
         Command::Apps => dump(&hm_system::apps::list_apps(&ctx)?)?,
         Command::Startup => dump(&hm_system::startup::list_items(&ctx)?)?,
+        Command::Security => dump(&hm_system::security::report(&ctx)?)?,
         Command::Monitor => {
             let mut monitor = hm_system::monitor::Monitor::new();
             monitor.refresh();

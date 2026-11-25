@@ -11,6 +11,7 @@ mod ports;
 mod projects;
 mod resumen;
 mod resumen_tiles;
+mod security;
 mod settings;
 mod sheet_result;
 mod sheet_review;
@@ -110,6 +111,7 @@ impl Shell {
             Page::Puertos => self.render_ports(window, cx),
             Page::Apps => self.render_apps(window, cx),
             Page::Arranque => self.render_startup(window, cx),
+            Page::Seguridad => self.render_security(window, cx),
             Page::Mapa => self.render_disk(window, cx),
             Page::Monitor => self.render_monitor(window, cx),
             Page::Ajustes => self.render_settings(window, cx),

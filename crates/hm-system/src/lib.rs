@@ -7,6 +7,7 @@ pub mod health;
 mod inventory;
 pub mod monitor;
 pub mod scanners;
+pub mod security;
 pub mod space;
 pub mod startup;
 pub mod types;

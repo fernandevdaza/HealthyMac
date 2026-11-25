@@ -24,7 +24,7 @@ use hm_core::{t, Config, ScanContext};
 
 use crate::state::{
     AppsState, DiskState, LiveState, ModelsState, Page, PortsState, ProjectsState, RunMode,
-    ScanState, ScrollPane, SettingsState, Shell, StartupState,
+    ScanState, ScrollPane, SecurityState, SettingsState, Shell, StartupState,
 };
 
 actions!(
@@ -193,6 +193,7 @@ fn main() {
                                 startup: StartupState::default(),
                                 disk: DiskState::default(),
                                 settings: SettingsState::default(),
+                                security: SecurityState::default(),
                                 sheet: None,
                                 sheet_closing: false,
                                 sheet_opened: 0,
