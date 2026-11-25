@@ -608,17 +608,27 @@ n[::1]:5432
     fn another_users_process_is_refused() {
         // Any Mac has root processes other than launchd, which is refused for a different reason.
         let output = exec::run(Path::new(PS), &["-axo", "pid=,uid="], TIMEOUT).unwrap();
-        let root_owned = output.stdout.lines().find_map(|line| {
-            let mut parts = line.split_whitespace();
-            let pid: u32 = parts.next()?.parse().ok()?;
-            let uid: u32 = parts.next()?.parse().ok()?;
-            (uid == 0 && pid > 1).then_some(pid)
-        });
-        let Some(pid) = root_owned else {
+        let mut root_owned: Vec<u32> = output
+            .stdout
+            .lines()
+            .filter_map(|line| {
+                let mut parts = line.split_whitespace();
+                let pid: u32 = parts.next()?.parse().ok()?;
+                let uid: u32 = parts.next()?.parse().ok()?;
+                (uid == 0 && pid > 1).then_some(pid)
+            })
+            .collect();
+        // The lowest pids are daemons started at boot, which stay up. A short-lived root process
+        // can exit between `ps` and the check, so one that has gone is skipped, not a failure.
+        root_owned.sort_unstable();
+        for pid in root_owned.into_iter().take(20) {
+            let error = terminate(pid, false).unwrap_err().to_string();
+            if error.contains("ya no existe") {
+                continue;
+            }
+            assert!(error.contains("otro usuario"), "{error}");
             return;
-        };
-        let error = terminate(pid, false).unwrap_err().to_string();
-        assert!(error.contains("otro usuario"), "{error}");
+        }
     }
 
     #[test]
